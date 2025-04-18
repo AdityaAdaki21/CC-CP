@@ -1,78 +1,185 @@
 <!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Performance Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Comprehensive Student Dashboard</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 </head>
 <body>
     <div class="dashboard">
         <header class="header">
-            <h1>Student Performance Dashboard</h1>
-            <p>Data visualization of exam performance across departments</p>
+            <h1>Comprehensive Student Dashboard</h1>
+            <p>Academic Performance, Placement Statistics, and Faculty Evaluations</p>
+            <div class="tab-navigation">
+                <button class="tab-button active" onclick="showTab('exam-tab')">Academic Performance</button>
+                <button class="tab-button" onclick="showTab('placement-tab')">Placement Statistics</button>
+                <button class="tab-button" onclick="showTab('faculty-tab')">Faculty Evaluations</button>
+            </div>
         </header>
         
         <div class="main-content">
-            <div class="summary-cards">
-                <div class="card">
-                    <h3>Students</h3>
-                    <div class="chart-container" style="position: relative; height:150px; width:100%">
-                        <canvas id="genderChart"></canvas>
+            <!-- Academic Performance Tab -->
+            <div id="exam-tab" class="tab-content active">
+                <div class="section-title">
+                    <h2>Academic Performance</h2>
+                </div>
+                
+                <div class="summary-cards">
+                    <div class="card">
+                        <h3>Grade Distribution</h3>
+                        <div class="chart-container">
+                            <canvas id="gradeChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Internal vs External Marks</h3>
+                        <div class="chart-container">
+                            <canvas id="marksComparisonChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Semester Performance</h3>
+                        <div class="chart-container">
+                            <canvas id="semesterChart"></canvas>
+                        </div>
                     </div>
                 </div>
-                <div class="card">
-                    <h3>Exam Types</h3>
-                    <div class="chart-container" style="position: relative; height:150px; width:100%">
-                        <canvas id="examTypeChart"></canvas>
+                
+                <div class="chart-row">
+                    <div class="card wide-card">
+                        <h3>Department Performance</h3>
+                        <div class="chart-container">
+                            <canvas id="departmentPerformanceChart"></canvas>
+                        </div>
                     </div>
                 </div>
-                <div class="card">
-                    <h3>Year Distribution</h3>
-                    <div class="chart-container" style="position: relative; height:150px; width:100%">
-                        <canvas id="yearChart"></canvas>
+                
+                <div class="chart-row">
+                    <div class="card">
+                        <h3>Top Performing Subjects</h3>
+                        <div class="chart-container">
+                            <canvas id="topSubjectsChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Subject Performance Analysis</h3>
+                        <div class="chart-container">
+                            <canvas id="subjectAnalysisChart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <div class="chart-row">
-                <div class="card wide-card">
-                    <h3>Department Performance</h3>
-                    <div class="chart-container" style="position: relative; height:250px; width:100%">
-                        <canvas id="departmentChart"></canvas>
+            <!-- Placement Statistics Tab -->
+            <div id="placement-tab" class="tab-content">
+                <div class="section-title">
+                    <h2>Placement Statistics</h2>
+                </div>
+                
+                <div class="summary-cards">
+                    <div class="card">
+                        <h3>Placement Rate by Department</h3>
+                        <div class="chart-container">
+                            <canvas id="placementRateChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Average Package (LPA)</h3>
+                        <div class="chart-container">
+                            <canvas id="packageChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Gender Placement Comparison</h3>
+                        <div class="chart-container">
+                            <canvas id="genderPlacementChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chart-row">
+                    <div class="card wide-card">
+                        <h3>CGPA vs Package Correlation</h3>
+                        <div class="chart-container">
+                            <canvas id="cgpaPackageChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chart-row">
+                    <div class="card">
+                        <h3>Top Recruiting Companies</h3>
+                        <div class="chart-container">
+                            <canvas id="companiesChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Most In-Demand Skills</h3>
+                        <div class="chart-container">
+                            <canvas id="skillsChart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <div class="chart-row">
-                <div class="card">
-                    <h3>Top Performing Subjects</h3>
-                    <div class="chart-container" style="position: relative; height:250px; width:100%">
-                        <canvas id="subjectsChart"></canvas>
+            <!-- Faculty Evaluations Tab -->
+            <div id="faculty-tab" class="tab-content">
+                <div class="section-title">
+                    <h2>Faculty Evaluations</h2>
+                </div>
+                
+                <div class="summary-cards">
+                    <div class="card">
+                        <h3>Average Ratings by Category</h3>
+                        <div class="chart-container">
+                            <canvas id="ratingsChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Department Teaching Ratings</h3>
+                        <div class="chart-container">
+                            <canvas id="deptRatingsChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Semester Comparison</h3>
+                        <div class="chart-container">
+                            <canvas id="facultySemesterChart"></canvas>
+                        </div>
                     </div>
                 </div>
-                <div class="card">
-                    <h3>CGPA Distribution</h3>
-                    <div class="chart-container" style="position: relative; height:250px; width:100%">
-                        <canvas id="cgpaChart"></canvas>
+                
+                <div class="chart-row">
+                    <div class="card wide-card">
+                        <h3>Faculty Rating Trends</h3>
+                        <div class="chart-container">
+                            <canvas id="ratingTrendsChart"></canvas>
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="chart-row">
-                <div class="card wide-card">
-                    <h3>Marks Distribution</h3>
-                    <div class="chart-container" style="position: relative; height:250px; width:100%">
-                        <canvas id="marksChart"></canvas>
+                
+                <div class="chart-row">
+                    <div class="card">
+                        <h3>Top Rated Faculty</h3>
+                        <div class="chart-container">
+                            <canvas id="topFacultyChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Course Rating Comparison</h3>
+                        <div class="chart-container">
+                            <canvas id="courseRatingChart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         
         <footer class="footer">
-            <p>© 2025 Student Performance Dashboard | Data sourced from AWS S3</p>
+            <p>© 2025 Comprehensive Student Dashboard | Data sourced from AWS S3</p>
         </footer>
     </div>
 

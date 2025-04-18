@@ -5,6 +5,7 @@ import boto3
 import io
 from dotenv import load_dotenv
 import os
+from collections import Counter
 
 # Load environment variables from .env file
 load_dotenv()
@@ -13,7 +14,6 @@ app = Flask(__name__)
 
 # AWS S3 Configuration
 S3_BUCKET = 'student-performance-dashboard'
-S3_FILE_PATH = 'data/exam_data.csv'
 
 @app.route('/')
 def index():
@@ -22,56 +22,150 @@ def index():
 @app.route('/api/data')
 def get_data():
     # Get data from S3
-    df = get_data_from_s3()
+    exam_df = get_data_from_s3('data/exam_data.csv')
+    placement_df = get_data_from_s3('data/placement_data.csv')
+    faculty_df = get_data_from_s3('data/faculty_reviews.csv')
     
-    # Process data for visualization
-    performance_by_department = df.groupby('department')['marks'].mean().round(2).to_dict()
-    gender_distribution = df['gender'].value_counts().to_dict()
+    # Process exam data
+    exam_data = process_exam_data(exam_df)
     
-    # Performance by exam_type
-    exam_performance = df.groupby('exam_type')['marks'].mean().round(2).to_dict()
+    # Process placement data
+    placement_data = process_placement_data(placement_df)
     
-    # Top subjects by average marks
-    top_subjects = df.groupby('subjects')['marks'].mean().sort_values(ascending=False).head(5).to_dict()
-    
-    # CGPA distribution data
-    cgpa_ranges = ['<7.0', '7.0-8.0', '8.0-9.0', '9.0+']
-    cgpa_counts = [
-        len(df[df['cgpa'] < 7.0]),
-        len(df[(df['cgpa'] >= 7.0) & (df['cgpa'] < 8.0)]),
-        len(df[(df['cgpa'] >= 8.0) & (df['cgpa'] < 9.0)]),
-        len(df[df['cgpa'] >= 9.0])
-    ]
-    
-    # Year/Semester distribution
-    year_distribution = df['year_or_semester'].value_counts().sort_index().to_dict()
-    
-    # Marks distribution
-    marks_ranges = ['0-25', '26-50', '51-75', '76-100']
-    marks_counts = [
-        len(df[df['marks'] <= 25]),
-        len(df[(df['marks'] > 25) & (df['marks'] <= 50)]),
-        len(df[(df['marks'] > 50) & (df['marks'] <= 75)]),
-        len(df[df['marks'] > 75])
-    ]
+    # Process faculty data
+    faculty_data = process_faculty_data(faculty_df)
     
     return jsonify({
-        'performance_by_department': performance_by_department,
-        'gender_distribution': gender_distribution,
-        'exam_performance': exam_performance,
-        'top_subjects': top_subjects,
-        'cgpa_distribution': {
-            'labels': cgpa_ranges,
-            'data': cgpa_counts
-        },
-        'year_distribution': year_distribution,
-        'marks_distribution': {
-            'labels': marks_ranges,
-            'data': marks_counts
-        }
+        'exam_data': exam_data,
+        'placement_data': placement_data,
+        'faculty_data': faculty_data
     })
 
-def get_data_from_s3():
+def process_exam_data(df):
+    if df.empty:
+        return {}
+    
+    # Performance by department
+    performance_by_department = df.groupby('Department')['Total_Marks'].mean().round(2).to_dict()
+    
+    # Grade distribution
+    grade_distribution = df['Grade'].value_counts().to_dict()
+    
+    # Top subjects by performance
+    subject_performance = df.groupby('Subject_Name')['Total_Marks'].mean().sort_values(ascending=False).head(5).to_dict()
+    
+    # Internal vs External marks comparison (average)
+    marks_comparison = {
+        'Internal': df['Internal_Marks'].mean().round(2),
+        'External': df['External_Marks'].mean().round(2)
+    }
+    
+    # Performance by semester and year
+    semester_performance = df.groupby('Semester')['Total_Marks'].mean().round(2).to_dict()
+    year_performance = df.groupby('Year')['Total_Marks'].mean().round(2).to_dict()
+    
+    return {
+        'performance_by_department': performance_by_department,
+        'grade_distribution': grade_distribution,
+        'subject_performance': subject_performance,
+        'marks_comparison': marks_comparison,
+        'semester_performance': semester_performance,
+        'year_performance': year_performance
+    }
+
+def process_placement_data(df):
+    if df.empty:
+        return {}
+    
+    # Convert placement column to numeric (if it's boolean or string)
+    if df['placement'].dtype == 'object':
+        df['placement'] = df['placement'].map({'Yes': 1, 'No': 0, True: 1, False: 0})
+    
+    # Placement rate by department
+    placement_rate_by_dept = df.groupby('department')['placement'].mean().round(2).to_dict()
+    
+    # Average package by department
+    package_by_dept = df.groupby('department')['package_lpa'].mean().round(2).to_dict()
+    
+    # CGPA to package correlation data
+    cgpa_package_data = {
+        'cgpa': df['cgpa'].tolist(),
+        'package': df['package_lpa'].tolist()
+    }
+    
+    # Top companies by placement count
+    top_companies = df[df['placement'] == 1]['company'].value_counts().head(10).to_dict()
+    
+    # Extract skills and count them
+    if 'skills' in df.columns and not df['skills'].isna().all():
+        # Split skills and flatten the list
+        skills_list = []
+        for skills in df['skills'].dropna():
+            skills_list.extend([skill.strip() for skill in skills.split(',')])
+        
+        # Count skills
+        skill_counts = Counter(skills_list)
+        top_skills = {k: v for k, v in sorted(skill_counts.items(), key=lambda item: item[1], reverse=True)[:10]}
+    else:
+        top_skills = {}
+    
+    # Gender-based placement statistics
+    if 'gender' in df.columns:
+        gender_placement = df.groupby(['gender', 'placement']).size().unstack(fill_value=0).to_dict()
+    else:
+        gender_placement = {}
+    
+    return {
+        'placement_rate_by_dept': placement_rate_by_dept,
+        'package_by_dept': package_by_dept,
+        'cgpa_package_data': cgpa_package_data,
+        'top_companies': top_companies,
+        'top_skills': top_skills,
+        'gender_placement': gender_placement
+    }
+
+def process_faculty_data(df):
+    if df.empty:
+        return {}
+    
+    # Average ratings across all categories
+    avg_ratings = {
+        'Rating_Teaching': df['Rating_Teaching'].mean().round(2),
+        'Rating_Engagement': df['Rating_Engagement'].mean().round(2),
+        'Rating_Clarity': df['Rating_Clarity'].mean().round(2),
+        'Rating_Punctuality': df['Rating_Punctuality'].mean().round(2)
+    }
+    
+    # Department ratings comparison
+    dept_teaching_ratings = df.groupby('Department')['Rating_Teaching'].mean().round(2).to_dict()
+    dept_engagement_ratings = df.groupby('Department')['Rating_Engagement'].mean().round(2).to_dict()
+    dept_clarity_ratings = df.groupby('Department')['Rating_Clarity'].mean().round(2).to_dict()
+    
+    # Ratings by semester
+    semester_ratings = df.groupby('Semester')['Rating_Teaching'].mean().round(2).to_dict()
+    
+    # Top rated faculty (by overall average)
+    df['Overall_Rating'] = df[['Rating_Teaching', 'Rating_Engagement', 'Rating_Clarity', 'Rating_Punctuality']].mean(axis=1)
+    top_faculty = df.groupby('Faculty_Name')['Overall_Rating'].mean().sort_values(ascending=False).head(5).round(2).to_dict()
+    
+    # Course ratings
+    course_ratings = df.groupby('Course_Taught')['Overall_Rating'].mean().sort_values(ascending=False).head(5).round(2).to_dict()
+    
+    # Year-wise rating trends
+    year_ratings = df.groupby('Year')[['Rating_Teaching', 'Rating_Engagement', 'Rating_Clarity', 'Rating_Punctuality']].mean().round(2).to_dict()
+    
+    return {
+        'avg_ratings': avg_ratings,
+        'dept_teaching_ratings': dept_teaching_ratings,
+        'dept_engagement_ratings': dept_engagement_ratings,
+        'dept_clarity_ratings': dept_clarity_ratings,
+        'semester_ratings': semester_ratings,
+        'top_faculty': top_faculty,
+        'course_ratings': course_ratings,
+        'year_ratings': year_ratings
+    }
+
+def get_data_from_s3(file_path):
     try:
         # Initialize S3 client with credentials from environment variables
         s3_client = boto3.client(
@@ -82,7 +176,7 @@ def get_data_from_s3():
         )
         
         # Get the CSV file from S3
-        response = s3_client.get_object(Bucket=S3_BUCKET, Key=S3_FILE_PATH)
+        response = s3_client.get_object(Bucket=S3_BUCKET, Key=file_path)
         
         # Read the CSV data
         csv_content = response['Body'].read()
@@ -93,8 +187,8 @@ def get_data_from_s3():
         return df
     
     except Exception as e:
-        print(f"Error fetching data from S3: {e}")
-        # Return sample data or empty DataFrame if error occurs
+        print(f"Error fetching data from S3 ({file_path}): {e}")
+        # Return empty DataFrame if error occurs
         return pd.DataFrame()
 
 if __name__ == '__main__':

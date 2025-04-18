@@ -1,0 +1,81 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Performance Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <h1>Student Performance Dashboard</h1>
+            <p>Data visualization of exam performance across departments</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="summary-cards">
+                <div class="card">
+                    <h3>Students</h3>
+                    <div class="chart-container" style="position: relative; height:150px; width:100%">
+                        <canvas id="genderChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Exam Types</h3>
+                    <div class="chart-container" style="position: relative; height:150px; width:100%">
+                        <canvas id="examTypeChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Year Distribution</h3>
+                    <div class="chart-container" style="position: relative; height:150px; width:100%">
+                        <canvas id="yearChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-row">
+                <div class="card wide-card">
+                    <h3>Department Performance</h3>
+                    <div class="chart-container" style="position: relative; height:250px; width:100%">
+                        <canvas id="departmentChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-row">
+                <div class="card">
+                    <h3>Top Performing Subjects</h3>
+                    <div class="chart-container" style="position: relative; height:250px; width:100%">
+                        <canvas id="subjectsChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>CGPA Distribution</h3>
+                    <div class="chart-container" style="position: relative; height:250px; width:100%">
+                        <canvas id="cgpaChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-row">
+                <div class="card wide-card">
+                    <h3>Marks Distribution</h3>
+                    <div class="chart-container" style="position: relative; height:250px; width:100%">
+                        <canvas id="marksChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="footer">
+            <p>© 2025 Student Performance Dashboard | Data sourced from AWS S3</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

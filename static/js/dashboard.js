@@ -31,10 +31,11 @@ async function fetchDashboardData() {
             throw new Error(errorBody);
         }
         const data = await response.json();
-        console.log("API Data Received:", JSON.parse(JSON.stringify(data))); // Deep copy log
-        // Check if backend explicitly sent an error object for a section
-        if (data.exam_data?.error || data.placement_data?.error || data.faculty_data?.error) {
-             console.warn("Data fetched but contains errors in sections:", data);
+        console.log("API Data Received (with summaries):", JSON.parse(JSON.stringify(data))); // Deep copy log
+        // Check for errors in main sections or summary generation
+        if (data.exam_data?.error || data.placement_data?.error || data.faculty_data?.error ||
+            data.exam_data?.gemini_summary_error || data.placement_data?.gemini_summary_error || data.faculty_data?.gemini_summary_error) {
+             console.warn("Data fetched but contains errors in sections or summaries:", data);
         }
         hideLoading();
         return data;
@@ -155,9 +156,47 @@ function updateComparisonNote(elementId, value, unit = '', prefix = 'Overall Avg
      }
 }
 
+// --- NEW: Helper function to display AI summary or error ---
+function updateSummaryDisplay(summaryId, errorId, summaryText, errorText) {
+    const summaryElement = document.getElementById(summaryId);
+    const errorElement = document.getElementById(errorId);
+
+    if (!summaryElement || !errorElement) {
+        console.warn(`Summary display elements not found for IDs: ${summaryId}, ${errorId}`);
+        return;
+    }
+
+    // Clear previous state
+    summaryElement.textContent = '';
+    summaryElement.style.display = 'none';
+    errorElement.textContent = '';
+    errorElement.style.display = 'none';
+
+    if (errorText) {
+        errorElement.textContent = `Summary Error: ${errorText}`;
+        errorElement.style.display = 'block';
+    } else if (summaryText) {
+        summaryElement.textContent = summaryText;
+        summaryElement.style.display = 'block';
+    } else {
+        // Neither summary nor error text provided (maybe API disabled or unexpected state)
+        errorElement.textContent = 'Summary not available.';
+        errorElement.style.display = 'block';
+    }
+}
+
+
 // --- Section Initializers ---
 
 function initializeExamCharts(examData) {
+    // --- Display AI Summary FIRST ---
+    updateSummaryDisplay(
+        'exam-summary',
+        'exam-summary-error',
+        examData?.gemini_summary,
+        examData?.gemini_summary_error
+    );
+
     // --- KPIs & Global Error Handling ---
     if (!examData || examData.error) {
         const errorMsg = examData?.error || "Exam data unavailable";
@@ -172,7 +211,7 @@ function initializeExamCharts(examData) {
         updateKPI('kpi-avg-mark', null, '', 'Error');
         updateKPI('kpi-grade-overview', null, '', 'Error');
         updateComparisonNote('dept-perf-comparison-note', null); // Clear note
-        return;
+        return; // Don't proceed if main data failed
     }
 
     // --- Clear Previous Errors ---
@@ -184,11 +223,12 @@ function initializeExamCharts(examData) {
 
     // --- Update KPIs ---
     updateKPI('kpi-avg-mark', examData.kpi_overall_avg_mark);
-    if (examData.grade_distribution && Object.keys(examData.grade_distribution).length > 0) {
+    // Check if grade_distribution exists, is an object, and doesn't have an error key
+    if (examData.grade_distribution && typeof examData.grade_distribution === 'object' && !examData.grade_distribution.error && Object.keys(examData.grade_distribution).length > 0) {
         // Find grade with highest count
          const mostCommonGrade = Object.entries(examData.grade_distribution)
              .sort(([, countA], [, countB]) => countB - countA)[0]?.[0]; // Get key of first entry after sort
-         updateKPI('kpi-grade-overview', mostCommonGrade || 'N/A', '', 'N/A');
+             updateKPI('kpi-grade-overview', mostCommonGrade || 'N/A', '', 'N/A');
      } else {
          updateKPI('kpi-grade-overview', null); // Use default 'N/A'
      }
@@ -197,33 +237,36 @@ function initializeExamCharts(examData) {
     // --- Create Charts ---
 
     // Grade Distribution (Pie)
-    if (examData.grade_distribution && Object.values(examData.grade_distribution).some(v => v > 0)) {
+    if (examData.grade_distribution && typeof examData.grade_distribution === 'object' && !examData.grade_distribution.error && Object.values(examData.grade_distribution).some(v => v > 0)) {
         createPieChart('gradeChart', examData.grade_distribution);
     } else {
-        displayErrorOnChart('gradeChart', 'No Grade Distribution data found');
+        displayErrorOnChart('gradeChart', examData.grade_distribution?.error || 'No Grade Distribution data found');
     }
 
     // Department Performance (Bar)
      const overallAvgMark = examData.kpi_overall_avg_mark;
-    if (examData.performance_by_department && Object.keys(examData.performance_by_department).length > 0) {
+    // Check if performance_by_department exists, is an object, and doesn't have an error key
+    if (examData.performance_by_department && typeof examData.performance_by_department === 'object' && !examData.performance_by_department.error && Object.keys(examData.performance_by_department).length > 0) {
         createBarChart('departmentPerformanceChart', examData.performance_by_department, 'Avg Mark', 100); // Scale 0-100
         updateComparisonNote('dept-perf-comparison-note', overallAvgMark);
     } else {
-         displayErrorOnChart('departmentPerformanceChart', 'No Department Performance data found');
+         displayErrorOnChart('departmentPerformanceChart', examData.performance_by_department?.error || 'No Department Performance data found');
           updateComparisonNote('dept-perf-comparison-note', null);
     }
 
     // Top Performing Subjects (Horizontal Bar)
-    if (examData.subject_performance && Object.keys(examData.subject_performance).length > 0) {
+     // Check if subject_performance exists, is an object, and doesn't have an error key
+    if (examData.subject_performance && typeof examData.subject_performance === 'object' && !examData.subject_performance.error && Object.keys(examData.subject_performance).length > 0) {
         createHorizontalBarChart('topSubjectsChart', examData.subject_performance, 'Avg Mark', 100); // Scale 0-100
     } else {
-        displayErrorOnChart('topSubjectsChart', 'No Top Subject Performance data found');
+        displayErrorOnChart('topSubjectsChart', examData.subject_performance?.error ||'No Top Subject Performance data found');
     }
 
     // Internal vs External Marks Comparison (Bar)
      const comparisonData = {};
      let hasComparisonData = false;
-     if (examData.marks_comparison) {
+     // Check if marks_comparison exists and is an object
+     if (examData.marks_comparison && typeof examData.marks_comparison === 'object') {
           if (examData.marks_comparison.Internal !== null && typeof examData.marks_comparison.Internal === 'number') {
               comparisonData.Internal = examData.marks_comparison.Internal;
               hasComparisonData = true;
@@ -240,16 +283,25 @@ function initializeExamCharts(examData) {
      }
 
      // Yearly Performance Trend (Line) - using 'semester_performance' key from backend
-     if (examData.semester_performance && Object.keys(examData.semester_performance).length > 1) { // Need > 1 point for a trend
+     // Check if semester_performance exists, is an object, and doesn't have an error key
+     if (examData.semester_performance && typeof examData.semester_performance === 'object' && !examData.semester_performance.error && Object.keys(examData.semester_performance).length > 1) { // Need > 1 point for a trend
          createTrendChart('semesterChart', examData.semester_performance, 'Avg Marks');
-    } else if (examData.semester_performance && Object.keys(examData.semester_performance).length === 1){
+    } else if (examData.semester_performance && typeof examData.semester_performance === 'object' && !examData.semester_performance.error && Object.keys(examData.semester_performance).length === 1){
         displayErrorOnChart('semesterChart', 'Only one data point found for yearly trend');
     } else {
-        displayErrorOnChart('semesterChart', 'No Yearly Performance Trend data found');
+        displayErrorOnChart('semesterChart', examData.semester_performance?.error || 'No Yearly Performance Trend data found');
     }
 }
 
 function initializePlacementCharts(placementData) {
+    // --- Display AI Summary FIRST ---
+     updateSummaryDisplay(
+        'placement-summary',
+        'placement-summary-error',
+        placementData?.gemini_summary,
+        placementData?.gemini_summary_error
+    );
+
     // --- KPIs & Global Error Handling ---
     if (!placementData || placementData.error) {
         const errorMsg = placementData?.error || "Placement data unavailable";
@@ -264,7 +316,7 @@ function initializePlacementCharts(placementData) {
         updateKPI('kpi-avg-package', null, ' LPA', 'Error');
         updateComparisonNote('placement-rate-comparison-note', null);
         updateComparisonNote('package-dept-comparison-note', null);
-        return;
+        return; // Don't proceed if main data failed
     }
 
     // --- Clear Previous Errors ---
@@ -277,31 +329,35 @@ function initializePlacementCharts(placementData) {
     updateKPI('kpi-placement-rate', placementData.kpi_overall_placement_rate); // Already formatted string % or null
     updateKPI('kpi-avg-package', placementData.kpi_overall_avg_package, ' LPA');
 
+
     // --- Create Charts ---
 
     // Placement Rate by Department (Bar, Percentage)
     const overallPlacementRate = placementData.kpi_overall_placement_rate; // String e.g., "75.5%"
-    if (placementData.placement_rate_by_dept && Object.keys(placementData.placement_rate_by_dept).length > 0) {
+    if (placementData.placement_rate_by_dept && typeof placementData.placement_rate_by_dept === 'object' && !placementData.placement_rate_by_dept.error && Object.keys(placementData.placement_rate_by_dept).length > 0) {
         createBarChart('placementRateChart', placementData.placement_rate_by_dept, 'Placement Rate', 1, true); // percent = true
         updateComparisonNote('placement-rate-comparison-note', overallPlacementRate, '', 'Overall: ');
     } else {
-        displayErrorOnChart('placementRateChart', 'No Department Placement Rate data found');
+        displayErrorOnChart('placementRateChart', placementData.placement_rate_by_dept?.error || 'No Department Placement Rate data found');
          updateComparisonNote('placement-rate-comparison-note', null);
     }
 
     // Average Package by Department (Bar)
     const overallAvgPackage = placementData.kpi_overall_avg_package;
-    if (placementData.package_by_dept && Object.keys(placementData.package_by_dept).length > 0) {
+    if (placementData.package_by_dept && typeof placementData.package_by_dept === 'object' && !placementData.package_by_dept.error && Object.keys(placementData.package_by_dept).length > 0) {
         createBarChart('packageChart', placementData.package_by_dept, 'Avg Package (LPA)', null);
         updateComparisonNote('package-dept-comparison-note', overallAvgPackage, ' LPA', 'Overall Avg: ');
     } else {
-         displayErrorOnChart('packageChart', 'No Avg Package by Department data found');
+         displayErrorOnChart('packageChart', placementData.package_by_dept?.error || 'No Avg Package by Department data found');
           updateComparisonNote('package-dept-comparison-note', null);
     }
 
     // Gender Placement Comparison (Stacked Bar)
     if (placementData.gender_placement && typeof placementData.gender_placement === 'object' && Object.keys(placementData.gender_placement).length > 0 && !placementData.gender_placement.error) {
-        const hasCounts = Object.values(placementData.gender_placement).some(counts => (parseInt(counts['0']||0) + parseInt(counts['1']||0)) > 0);
+        // Check if there are actual counts > 0 before creating chart
+        const hasCounts = Object.values(placementData.gender_placement).some(counts =>
+            (parseInt(counts['0'] || 0) + parseInt(counts['1'] || 0)) > 0
+        );
         if (hasCounts) {
             createStackedBarChart('genderPlacementChart', placementData.gender_placement);
         } else {
@@ -312,35 +368,37 @@ function initializePlacementCharts(placementData) {
     }
 
     // CGPA Distribution (Bar)
-    if (placementData.cgpa_distribution && Object.keys(placementData.cgpa_distribution).length > 0 && !placementData.cgpa_distribution.error) {
+    if (placementData.cgpa_distribution && typeof placementData.cgpa_distribution === 'object' && !placementData.cgpa_distribution.error && Object.keys(placementData.cgpa_distribution).length > 0) {
         createBarChart('cgpaDistributionChart', placementData.cgpa_distribution, 'No. of Students', null);
     } else {
         displayErrorOnChart('cgpaDistributionChart', placementData.cgpa_distribution?.error || 'CGPA Distribution data unavailable');
     }
 
     // Avg CGPA Placed vs. Not Placed (Bar)
-    if (placementData.avg_cgpa_by_placement && Object.keys(placementData.avg_cgpa_by_placement).length > 0 && !placementData.avg_cgpa_by_placement.error) {
+    if (placementData.avg_cgpa_by_placement && typeof placementData.avg_cgpa_by_placement === 'object' && !placementData.avg_cgpa_by_placement.error && Object.keys(placementData.avg_cgpa_by_placement).length > 0) {
          createBarChart('cgpaPlacedVsUnplacedChart', placementData.avg_cgpa_by_placement, 'Average CGPA', 10); // Max CGPA 10
     } else {
          displayErrorOnChart('cgpaPlacedVsUnplacedChart', placementData.avg_cgpa_by_placement?.error || 'Avg CGPA comparison unavailable');
     }
 
     // CGPA vs Package (Scatter)
-    if (placementData.cgpa_package_data && placementData.cgpa_package_data.cgpa?.length > 0) { // Check length after backend ensures match
+    // Ensure cgpa_package_data exists and has the expected structure before accessing .cgpa
+    if (placementData.cgpa_package_data && typeof placementData.cgpa_package_data === 'object' && Array.isArray(placementData.cgpa_package_data.cgpa) && placementData.cgpa_package_data.cgpa.length > 0) {
         createScatterPlot('cgpaPackageChart', placementData.cgpa_package_data);
     } else {
-        displayErrorOnChart('cgpaPackageChart', 'Insufficient data for CGPA vs Package plot');
+        displayErrorOnChart('cgpaPackageChart', placementData.cgpa_package_data?.error || 'Insufficient data for CGPA vs Package plot');
     }
 
+
     // Top Recruiting Companies (Horizontal Bar)
-    if (placementData.top_companies && Object.keys(placementData.top_companies).length > 0 && !placementData.top_companies.error) {
+    if (placementData.top_companies && typeof placementData.top_companies === 'object' && !placementData.top_companies.error && Object.keys(placementData.top_companies).length > 0) {
         createHorizontalBarChart('companiesChart', placementData.top_companies, 'No. of Placements');
     } else {
          displayErrorOnChart('companiesChart', placementData.top_companies?.error || 'Top Companies data unavailable');
     }
 
     // Most In-Demand Skills (Horizontal Bar)
-    if (placementData.top_skills && Object.keys(placementData.top_skills).length > 0 && !placementData.top_skills.error) {
+    if (placementData.top_skills && typeof placementData.top_skills === 'object' && !placementData.top_skills.error && Object.keys(placementData.top_skills).length > 0) {
         createHorizontalBarChart('skillsChart', placementData.top_skills, 'Frequency');
     } else {
         displayErrorOnChart('skillsChart', placementData.top_skills?.error || 'Top Skills data unavailable');
@@ -348,6 +406,14 @@ function initializePlacementCharts(placementData) {
 }
 
 function initializeFacultyCharts(facultyData) {
+    // --- Display AI Summary FIRST ---
+    updateSummaryDisplay(
+        'faculty-summary',
+        'faculty-summary-error',
+        facultyData?.gemini_summary,
+        facultyData?.gemini_summary_error
+    );
+
     // --- KPIs & Global Error Handling ---
     if (!facultyData || facultyData.error) {
         const errorMsg = facultyData?.error || "Faculty data unavailable";
@@ -355,17 +421,25 @@ function initializeFacultyCharts(facultyData) {
         const chartIds = ['ratingsChart', 'deptRatingsChart', 'facultySemesterChart',
                           'ratingTrendsChart', 'topFacultyChart', 'courseRatingChart'];
         // Use the specific error for the chart that was replaced if available
-        const ratingDistError = facultyData.rating_distribution?.error ? facultyData.rating_distribution.error : errorMsg;
+        const ratingDistError = (facultyData && facultyData.rating_distribution && facultyData.rating_distribution.error) ? facultyData.rating_distribution.error : errorMsg;
         chartIds.forEach(id => {
             if (id === 'ratingsChart') {
                  displayErrorOnChart(id, ratingDistError); // Show specific error if distribution failed
             } else {
-                 displayErrorOnChart(id, errorMsg); // General error for others
+                 // Check if specific data for other charts has an error key
+                 let specificError = errorMsg; // Default to general error
+                 if (id === 'deptRatingsChart' && facultyData?.dept_teaching_ratings?.error) specificError = facultyData.dept_teaching_ratings.error;
+                 else if (id === 'facultySemesterChart' && facultyData?.semester_ratings?.error) specificError = facultyData.semester_ratings.error;
+                 else if (id === 'ratingTrendsChart' && facultyData?.yearly_average_trend?.error) specificError = facultyData.yearly_average_trend.error;
+                 else if (id === 'topFacultyChart' && facultyData?.top_faculty?.error) specificError = facultyData.top_faculty.error;
+                 else if (id === 'courseRatingChart' && facultyData?.course_ratings?.error) specificError = facultyData.course_ratings.error;
+
+                 displayErrorOnChart(id, specificError); // Show specific error if available
             }
         });
         updateKPI('kpi-avg-rating', null, '', 'Error');
         updateComparisonNote('dept-rating-comparison-note', null);
-        return;
+        return; // Don't proceed if main data failed
     }
 
     // --- Clear Previous Errors ---
@@ -377,10 +451,8 @@ function initializeFacultyCharts(facultyData) {
      updateKPI('kpi-avg-rating', facultyData.kpi_overall_avg_rating);
 
     // --- Create Charts ---
-
-    // *** REPLACED RADAR CHART ***
     // Rating Distribution (Bar Chart)
-    if (facultyData.rating_distribution && Object.keys(facultyData.rating_distribution).length > 0 && !facultyData.rating_distribution.error) {
+    if (facultyData.rating_distribution && typeof facultyData.rating_distribution === 'object' && !facultyData.rating_distribution.error && Object.keys(facultyData.rating_distribution).length > 0) {
         // Create bar chart: keys (1-5) on X-axis, counts on Y-axis
         createBarChart('ratingsChart', facultyData.rating_distribution, 'Number of Reviews', null); // Max Y auto, not percent
     } else {
@@ -390,45 +462,46 @@ function initializeFacultyCharts(facultyData) {
 
     // Department Teaching Ratings (Bar)
     const overallAvgRating = facultyData.kpi_overall_avg_rating;
-    if (facultyData.dept_teaching_ratings && Object.keys(facultyData.dept_teaching_ratings).length > 0) {
+    if (facultyData.dept_teaching_ratings && typeof facultyData.dept_teaching_ratings === 'object' && !facultyData.dept_teaching_ratings.error && Object.keys(facultyData.dept_teaching_ratings).length > 0) {
         createBarChart('deptRatingsChart', facultyData.dept_teaching_ratings, 'Avg Rating', 5);
         updateComparisonNote('dept-rating-comparison-note', overallAvgRating, '', 'Overall Avg: ');
     } else {
-        displayErrorOnChart('deptRatingsChart', 'Department Rating data unavailable');
+        displayErrorOnChart('deptRatingsChart', facultyData.dept_teaching_ratings?.error || 'Department Rating data unavailable');
         updateComparisonNote('dept-rating-comparison-note', null);
     }
 
-    // Semester Rating Comparison (Bar)
-    if (facultyData.semester_ratings && Object.keys(facultyData.semester_ratings).length > 0) {
+     // Semester Rating Comparison (Bar)
+    if (facultyData.semester_ratings && typeof facultyData.semester_ratings === 'object' && !facultyData.semester_ratings.error && Object.keys(facultyData.semester_ratings).length > 0) {
         createBarChart('facultySemesterChart', facultyData.semester_ratings, 'Avg Rating', 5);
     } else {
-         displayErrorOnChart('facultySemesterChart', 'Semester Rating data unavailable');
+         displayErrorOnChart('facultySemesterChart', facultyData.semester_ratings?.error || 'Semester Rating data unavailable');
     }
 
     // Overall Faculty Rating Trend (Yearly) (Line)
-    if (facultyData.yearly_average_trend && Object.keys(facultyData.yearly_average_trend).length > 1) {
+    if (facultyData.yearly_average_trend && typeof facultyData.yearly_average_trend === 'object' && !facultyData.yearly_average_trend.error && Object.keys(facultyData.yearly_average_trend).length > 1) {
         createTrendChart('ratingTrendsChart', facultyData.yearly_average_trend, 'Overall Avg Rating');
-    } else if (facultyData.yearly_average_trend && Object.keys(facultyData.yearly_average_trend).length === 1){
+    } else if (facultyData.yearly_average_trend && typeof facultyData.yearly_average_trend === 'object' && !facultyData.yearly_average_trend.error && Object.keys(facultyData.yearly_average_trend).length === 1){
         displayErrorOnChart('ratingTrendsChart', 'Only one data point found for yearly rating trend');
     }
      else {
-        displayErrorOnChart('ratingTrendsChart', 'Yearly Rating Trend data unavailable');
+        displayErrorOnChart('ratingTrendsChart', facultyData.yearly_average_trend?.error || 'Yearly Rating Trend data unavailable');
     }
 
     // Top Rated Faculty (Horizontal Bar)
-    if (facultyData.top_faculty && Object.keys(facultyData.top_faculty).length > 0) {
+    if (facultyData.top_faculty && typeof facultyData.top_faculty === 'object' && !facultyData.top_faculty.error && Object.keys(facultyData.top_faculty).length > 0) {
         createHorizontalBarChart('topFacultyChart', facultyData.top_faculty, 'Avg Rating', 5);
     } else {
-        displayErrorOnChart('topFacultyChart', 'Top Rated Faculty data unavailable');
+        displayErrorOnChart('topFacultyChart', facultyData.top_faculty?.error || 'Top Rated Faculty data unavailable');
     }
 
     // Top Rated Courses (Horizontal Bar)
-    if (facultyData.course_ratings && Object.keys(facultyData.course_ratings).length > 0) {
+    if (facultyData.course_ratings && typeof facultyData.course_ratings === 'object' && !facultyData.course_ratings.error && Object.keys(facultyData.course_ratings).length > 0) {
         createHorizontalBarChart('courseRatingChart', facultyData.course_ratings, 'Avg Rating', 5);
     } else {
-        displayErrorOnChart('courseRatingChart', 'Top Rated Courses data unavailable');
+        displayErrorOnChart('courseRatingChart', facultyData.course_ratings?.error || 'Top Rated Courses data unavailable');
     }
 }
+
 
 // --- Tab Navigation ---
 function setupTabNavigation() {
@@ -468,7 +541,11 @@ function showTab(tabId) {
 
     console.log(`Switched to tab: ${tabId}`);
     // Optional: Force redraw charts in the new tab if they render oddly
-    // window.dispatchEvent(new Event('resize'));
+    // This might be needed if charts are initialized while the tab is hidden
+    // Delay slightly to ensure tab is visible
+    // setTimeout(() => {
+    //     window.dispatchEvent(new Event('resize'));
+    // }, 100);
 }
 
 
@@ -487,7 +564,8 @@ function createBarChart(elementId, data, label, maxValue, percent = false) {
     destroyChartIfExists(elementId);
 
     if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-        displayErrorOnChart(elementId, `No data available for chart`);
+        // Don't display error here if backend already provided an error message for this chart
+        // displayErrorOnChart(elementId, `No data available for chart`);
         return;
     }
 
@@ -565,7 +643,7 @@ function createHorizontalBarChart(elementId, data, label, maxValue) {
     destroyChartIfExists(elementId);
 
     if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-        displayErrorOnChart(elementId, `No data available`);
+        // displayErrorOnChart(elementId, `No data available`);
         return;
     }
 
@@ -629,7 +707,7 @@ function createPieChart(elementId, data) {
     destroyChartIfExists(elementId);
 
     if (!data || typeof data !== 'object' || Object.values(data).every(v => v === 0)) {
-        displayErrorOnChart(elementId, `No data available for pie chart`);
+        // displayErrorOnChart(elementId, `No data available for pie chart`);
         return;
     }
 
@@ -662,7 +740,9 @@ function createPieChart(elementId, data) {
                             label: function(context) {
                                 let label = context.label || '';
                                 let value = context.raw;
-                                let total = context.chart.getDatasetMeta(0)?.total ?? 1; // Avoid div by zero
+                                // Ensure the dataset has meta information before accessing total
+                                const meta = context.chart.getDatasetMeta(0);
+                                let total = meta?.total ?? 1; // Use meta total, avoid div by zero
                                 let percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
                                 return `${label}: ${value.toLocaleString()} (${percentage})`;
                             }
@@ -678,85 +758,6 @@ function createPieChart(elementId, data) {
     }
 }
 
-
-function createDoughnutChart(elementId, data) { /* ... same as pie, just type:'doughnut', add cutout option ... */ }
-
-
-function formatRatingLabel(key) {
-    return key.replace(/^Rating_/i, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-}
-
-
-function createRadarChart(elementId, data) {
-     const canvas = document.getElementById(elementId);
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    clearErrorOnChart(elementId);
-    destroyChartIfExists(elementId);
-
-    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-         displayErrorOnChart(elementId, 'No data for Radar Chart');
-         return;
-    }
-
-    const labels = Object.keys(data).map(formatRatingLabel);
-    const values = Object.values(data).map(v => (typeof v === 'number' && !isNaN(v) ? v : 0));
-
-     if (labels.length === 0 || values.every(v => v === 0)) {
-         displayErrorOnChart(elementId, 'No valid data points for Radar Chart');
-         return;
-     }
-
-    const maxScale = 5; // Assumed rating scale
-
-    try {
-        new Chart(ctx, {
-            type: 'radar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Average Rating', // Used in tooltip
-                    data: values,
-                    backgroundColor: 'rgba(23, 162, 184, 0.2)', // Info/Cyan transparent
-                    borderColor: 'rgba(23, 162, 184, 0.8)', // Info/Cyan solid
-                    pointBackgroundColor: 'rgba(23, 162, 184, 1)',
-                    pointBorderColor: '#fff',
-                    pointHoverBackgroundColor: '#fff',
-                    pointHoverBorderColor: 'rgba(23, 162, 184, 1)',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    r: { // Radial axis (values)
-                        beginAtZero: true, min: 0, max: maxScale,
-                        ticks: { stepSize: 1, backdropColor: 'transparent', color: '#6c757d' },
-                        pointLabels: { font: { size: 13 }, color: '#495057' }, // Labels like "Teaching"
-                        grid: { color: '#dee2e6' },
-                        angleLines: { color: '#dee2e6' } // Lines from center
-                    }
-                },
-                plugins: {
-                    tooltip: {
-                         callbacks: {
-                              title: (tooltipItems) => tooltipItems[0]?.label ?? 'Category',
-                              label: (context) => `Average: ${context.raw?.toFixed(2) ?? 'N/A'}`
-                         }
-                    },
-                     legend: { display: false }
-                },
-                animation: { duration: 800, easing: 'easeOutCirc' }
-            }
-        });
-    } catch (error) {
-        console.error(`Chart.js error creating Radar Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
-    }
-}
-
-
 function createScatterPlot(elementId, data) {
      const canvas = document.getElementById(elementId);
     if (!canvas) return;
@@ -764,16 +765,19 @@ function createScatterPlot(elementId, data) {
     clearErrorOnChart(elementId);
     destroyChartIfExists(elementId);
 
+    // Data validation now happens primarily in backend; frontend checks array existence/length
     if (!data || !Array.isArray(data.cgpa) || !Array.isArray(data.package) || data.cgpa.length !== data.package.length || data.cgpa.length === 0) {
-        displayErrorOnChart(elementId, "Invalid or empty CGPA/Package data for Scatter Plot");
+        // displayErrorOnChart(elementId, "Invalid or empty CGPA/Package data for Scatter Plot");
         return;
     }
 
     const scatterData = [];
     for (let i = 0; i < data.cgpa.length; i++) {
-        const cgpa = parseFloat(data.cgpa[i]);
-        const pkg = parseFloat(data.package[i]);
-        if (Number.isFinite(cgpa) && Number.isFinite(pkg)) {
+        // Frontend parsing assumes backend sent valid numbers or nulls
+        const cgpa = data.cgpa[i]; // Assume numbers or null
+        const pkg = data.package[i];
+        // Only plot if both are valid numbers
+        if (typeof cgpa === 'number' && !isNaN(cgpa) && typeof pkg === 'number' && !isNaN(pkg)) {
             scatterData.push({ x: cgpa, y: pkg });
         }
     }
@@ -806,8 +810,8 @@ function createScatterPlot(elementId, data) {
                         title: { display: true, text: 'CGPA', font: { weight: 'bold' }, color: '#495057' },
                         grid: { color: '#e9ecef' },
                         ticks: { color: '#6c757d', precision: 1 }, // Allow one decimal for CGPA ticks
-                         // suggestedMin: 5, // Adjust based on typical range
-                         // suggestedMax: 10
+                         suggestedMin: Math.max(0, Math.min(...scatterData.map(d => d.x)) - 0.5), // Dynamic min based on data
+                         suggestedMax: Math.min(10, Math.max(...scatterData.map(d => d.x)) + 0.5) // Dynamic max
                     },
                     y: {
                         type: 'linear',
@@ -861,7 +865,7 @@ function createMarksComparisonChart(elementId, data) {
     }
 
     if (datasets.length === 0) {
-       displayErrorOnChart(elementId, 'No valid Internal/External mark data found');
+       // displayErrorOnChart(elementId, 'No valid Internal/External mark data found');
        return;
     }
 
@@ -903,14 +907,19 @@ function createTrendChart(elementId, data, label) {
     destroyChartIfExists(elementId);
 
     if (!data || typeof data !== 'object' || Object.keys(data).length < 2) { // Need at least 2 points for a trend
-        displayErrorOnChart(elementId, `Insufficient data for ${label} trend (requires >= 2 points)`);
+        // displayErrorOnChart(elementId, `Insufficient data for ${label} trend (requires >= 2 points)`);
         return;
     }
 
     const sortedKeys = Object.keys(data).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
     const labels = sortedKeys;
-    const values = sortedKeys.map(key => Number.isFinite(parseFloat(data[key])) ? parseFloat(data[key]) : null);
+    const values = sortedKeys.map(key => {
+        const val = parseFloat(data[key]);
+        return Number.isFinite(val) ? val : null; // Ensure only finite numbers or null are used
+    });
 
+
+    // Check if enough valid points exist *after* parsing
     if (values.filter(v => v !== null).length < 2) {
          displayErrorOnChart(elementId, `Not enough valid numeric data points for ${label} trend`);
          return;
@@ -975,7 +984,7 @@ function createStackedBarChart(elementId, data) {
     destroyChartIfExists(elementId);
 
     if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-        displayErrorOnChart(elementId, 'No data for Stacked Bar Chart');
+        // displayErrorOnChart(elementId, 'No data for Stacked Bar Chart');
         return;
     }
 
@@ -991,6 +1000,7 @@ function createStackedBarChart(elementId, data) {
         borderRadius: config.radius
     }));
 
+    // Check if all data values are zero AFTER parsing
     if (datasets.every(ds => ds.data.every(val => val === 0))) {
           displayErrorOnChart(elementId, 'All counts are zero');
           return;
@@ -1038,35 +1048,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (!dashboardData) {
         console.error("Dashboard data fetch failed. Cannot initialize dashboard.");
-        // Global error is shown by fetch function. Optionally add chart-specific fallbacks:
-        // displayErrorOnChart('gradeChart', 'Failed to load data');
-        // displayErrorOnChart('placementRateChart', 'Failed to load data'); // etc.
+        // Optionally display errors in summary sections too
+        updateSummaryDisplay('exam-summary', 'exam-summary-error', null, 'Failed to load data');
+        updateSummaryDisplay('placement-summary', 'placement-summary-error', null, 'Failed to load data');
+        updateSummaryDisplay('faculty-summary', 'faculty-summary-error', null, 'Failed to load data');
+        // Add generic error messages to some key charts if needed
+        displayErrorOnChart('gradeChart', 'Failed to load data');
+        displayErrorOnChart('placementRateChart', 'Failed to load data');
+        displayErrorOnChart('ratingsChart', 'Failed to load data');
         return;
     }
 
      clearGlobalErrorMessage(); // Clear if fetch was successful
 
     // Initialize each section, checking for the data key first
-    if (dashboardData.exam_data) {
-        initializeExamCharts(dashboardData.exam_data);
-    } else {
-        console.warn("Exam data missing from response. Initializing with error state.");
-        initializeExamCharts({ error: 'Exam data not found in response' });
-    }
-
-    if (dashboardData.placement_data) {
-        initializePlacementCharts(dashboardData.placement_data);
-    } else {
-         console.warn("Placement data missing from response. Initializing with error state.");
-        initializePlacementCharts({ error: 'Placement data not found in response' });
-    }
-
-     if (dashboardData.faculty_data) {
-        initializeFacultyCharts(dashboardData.faculty_data);
-     } else {
-        console.warn("Faculty data missing from response. Initializing with error state.");
-        initializeFacultyCharts({ error: 'Faculty data not found in response' });
-     }
+    // Pass the specific data slice or an object indicating error
+    initializeExamCharts(dashboardData.exam_data || { error: 'Exam data not found in response', gemini_summary_error: 'Data missing' });
+    initializePlacementCharts(dashboardData.placement_data || { error: 'Placement data not found in response', gemini_summary_error: 'Data missing' });
+    initializeFacultyCharts(dashboardData.faculty_data || { error: 'Faculty data not found in response', gemini_summary_error: 'Data missing' });
 
     console.log("Dashboard initialized.");
 });

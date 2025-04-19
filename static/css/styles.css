@@ -162,6 +162,56 @@ body {
     font-weight: 600;
 }
 
+/* --- AI Summary Styles --- */
+.summary-container {
+    /* Use a subtle background matching cards or a very light grey */
+    background-color: #ffffff;
+    border: 1px solid #e9ecef; /* Add a light border like other cards */
+    border-left: 4px solid #007bff; /* Keep a colored left accent border */
+    margin-bottom: 2.5rem; /* Consistent bottom margin */
+    padding: 1.5rem; /* Increase padding */
+    border-radius: 12px; /* Match card radius */
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05); /* Lighter shadow */
+}
+
+.summary-container h4 {
+    margin-bottom: 1rem; /* More space below title */
+    color: #495057; /* Slightly darker title color */
+    font-size: 1.1rem; /* Slightly smaller than card titles */
+    font-weight: 600;
+    border-bottom: 1px solid #dee2e6; /* Standard separator */
+    padding-bottom: 0.75rem;
+}
+
+.ai-summary-text {
+    color: #343a40; /* Standard text color */
+    font-size: 0.95rem;
+    line-height: 1.7; /* Increase line height for readability */
+    white-space: pre-wrap; /* CRITICAL: Respect newlines/spaces from Gemini */
+    display: none; /* Hide initially, shown by JS */
+    margin-top: 0.5rem; /* Space between title and text */
+}
+/* Style bullet points if Gemini consistently uses them */
+.ai-summary-text::marker { /* Requires Gemini to output actual list items */
+    /* color: #007bff; */ /* Optional: color bullets */
+}
+.ai-summary-text ul, .ai-summary-text ol {
+    padding-left: 20px; /* Indent lists */
+    margin-top: 0.5em;
+}
+ .ai-summary-text li {
+    margin-bottom: 0.5em; /* Space between list items */
+}
+
+
+.ai-summary-error {
+    color: #dc3545; /* Bootstrap danger red for errors */
+    font-size: 0.9rem;
+    font-weight: 500; /* Make error slightly bolder */
+    margin-top: 0.5rem;
+    display: none; /* Hidden by default, shown by JS */
+}
+
 /* --- KPI Row Styles --- */
 .kpi-row {
     display: grid;
@@ -227,16 +277,39 @@ body {
 .card {
     background-color: white;
     border-radius: 12px; /* Smoother corners */
-    padding: 1.8rem; /* More padding */
+    /* padding: 1.8rem; */ /* Padding handled by summary-container or chart padding */
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
     transition: transform 0.25s ease, box-shadow 0.25s ease;
     display: flex;
     flex-direction: column;
     overflow: hidden; /* Prevent content overflow */
+    /* Apply padding directly to children if needed, or ensure containers fill space */
 }
+.card > *:not(.summary-container):not(.chart-container) {
+    padding: 0 1.8rem; /* Add padding to non-summary/chart elements like titles/kpis */
+}
+ .card > .kpi-row, .card > h3 {
+     padding: 1.8rem 1.8rem 0 1.8rem; /* Adjust padding for specific elements if needed */
+ }
+ .card > h3 {
+     padding-bottom: 0.6rem;
+     margin-bottom: 1.2rem; /* Reset margin from default */
+ }
+ .card > .chart-container {
+     padding: 1.8rem; /* Add padding around the chart canvas */
+     padding-top: 0; /* No top padding if title is above */
+ }
+
+ 
 .card:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Don't apply hover effect to summary container */
+.summary-container.card:hover {
+    transform: none;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05); /* Keep original shadow */
 }
 
 .wide-card {
@@ -272,6 +345,26 @@ body {
     margin-top: 1rem;
     flex-grow: 1; /* Allows container to fill space */
 }
+
+/* Specific styling for chart error messages inside container */
+.chart-error-message {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 15px;
+    color: #dc3545; /* Danger color */
+    background-color: rgba(255, 255, 255, 0.9); /* slight bg */
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 10;
+    border-radius: inherit; /* Match card corner radius */
+    /* Initially hidden, shown by JS */
+    display: none;
+}
+
 
 .summary-cards .chart-container {
     height: 280px; /* Height for charts in summary row */
@@ -347,6 +440,9 @@ body {
         gap: 0.6rem;
     }
     .tab-button { width: 100%; padding: 0.7rem 1.5rem; }
+    .summary-container { padding: 1rem 1.2rem; }
+    .summary-container h4 { font-size: 1rem; }
+    .ai-summary-text { font-size: 0.9rem; }
 }
 
 @media (max-width: 576px) {

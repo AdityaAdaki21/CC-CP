@@ -1,22 +1,29 @@
 <!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Comprehensive Student Dashboard</title>
-        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Student Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <!-- Optional: Add chartjs-adapter-date-fns for advanced time scale features -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script> -->
 </head>
 <body>
+    <!-- Loading Indicator -->
+    <div id="loading-indicator" class="loading-overlay hidden"> <!-- Start hidden -->
+        <div class="loading-spinner"></div>
+        <p>Loading Dashboard Data...</p>
+    </div>
+
     <div class="dashboard">
         <header class="header">
             <h1>Comprehensive Student Dashboard</h1>
             <p>Academic Performance, Placement Statistics, and Faculty Evaluations</p>
-            <!-- Global error message container -->
-            <div class="global-error-container"></div>
+            <!-- Global error message inserted by JS -->
             <div class="tab-navigation">
-                <button class="tab-button" onclick="showTab('exam-tab')">Academic Performance</button>
+                <button class="tab-button active" onclick="showTab('exam-tab')">Academic Performance</button>
                 <button class="tab-button" onclick="showTab('placement-tab')">Placement Statistics</button>
                 <button class="tab-button" onclick="showTab('faculty-tab')">Faculty Evaluations</button>
             </div>
@@ -24,49 +31,45 @@
 
         <div class="main-content">
             <!-- Academic Performance Tab -->
-            <div id="exam-tab" class="tab-content"> <!-- Add initial 'active' class here or let JS handle it -->
+            <div id="exam-tab" class="tab-content active">
                 <div class="section-title">
                     <h2>Academic Performance</h2>
                 </div>
-
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <h4>Overall Avg. Mark</h4>
+                        <p id="kpi-avg-mark">--</p>
+                    </div>
+                    <div class="kpi-card">
+                        <h4>Grade Overview</h4>
+                        <p id="kpi-grade-overview">--</p> <!-- E.g. Most common -->
+                    </div>
+                </div>
                 <div class="summary-cards">
                     <div class="card">
                         <h3>Grade Distribution</h3>
-                        <div class="chart-container">
-                            <canvas id="gradeChart"></canvas>
-                        </div>
+                        <div class="chart-container"><canvas id="gradeChart"></canvas></div>
                     </div>
                     <div class="card">
                         <h3>Internal vs External Marks</h3>
-                        <div class="chart-container">
-                            <canvas id="marksComparisonChart"></canvas>
-                        </div>
+                        <div class="chart-container"><canvas id="marksComparisonChart"></canvas></div>
                     </div>
                     <div class="card">
-                        <h3>Semester Performance Trend</h3>
-                        <div class="chart-container">
-                            <canvas id="semesterChart"></canvas>
-                        </div>
+                         <h3>Yearly Performance Trend</h3>
+                        <div class="chart-container"><canvas id="semesterChart"></canvas></div>
                     </div>
                 </div>
-
                 <div class="chart-row">
                     <div class="card wide-card">
-                        <h3>Department Performance (Avg Marks)</h3>
-                        <div class="chart-container">
-                            <canvas id="departmentPerformanceChart"></canvas>
-                        </div>
+                        <h3>Department Performance (Avg Marks) <span class="comparison-note" id="dept-perf-comparison-note"></span></h3>
+                        <div class="chart-container large-chart"><canvas id="departmentPerformanceChart"></canvas></div>
                     </div>
                 </div>
-
                 <div class="chart-row">
-                    <div class="card"> <!-- Removed the second card from this row -->
+                    <div class="card">
                         <h3>Top Performing Subjects (Avg Marks)</h3>
-                        <div class="chart-container">
-                            <canvas id="topSubjectsChart"></canvas>
-                        </div>
+                        <div class="chart-container"><canvas id="topSubjectsChart"></canvas></div>
                     </div>
-                    <!-- Card containing subjectAnalysisChart was REMOVED from here -->
                 </div>
             </div>
 
@@ -75,49 +78,52 @@
                 <div class="section-title">
                     <h2>Placement Statistics</h2>
                 </div>
-
-                <div class="summary-cards">
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <h4>Overall Placement Rate</h4>
+                        <p id="kpi-placement-rate">--</p>
+                    </div>
+                    <div class="kpi-card">
+                        <h4>Overall Average Package (LPA)</h4>
+                        <p id="kpi-avg-package">--</p>
+                    </div>
+                </div>
+                <div class="summary-cards"> <!-- Now has 5 cards, may wrap based on CSS -->
                     <div class="card">
-                        <h3>Placement Rate by Department</h3>
-                        <div class="chart-container">
-                            <canvas id="placementRateChart"></canvas>
-                        </div>
+                        <h3>Placement Rate by Department <span class="comparison-note" id="placement-rate-comparison-note"></span></h3>
+                        <div class="chart-container"><canvas id="placementRateChart"></canvas></div>
                     </div>
                     <div class="card">
-                        <h3>Average Package (LPA)</h3>
-                        <div class="chart-container">
-                            <canvas id="packageChart"></canvas>
-                        </div>
+                        <h3>Avg. Package by Dept (LPA) <span class="comparison-note" id="package-dept-comparison-note"></span></h3>
+                        <div class="chart-container"><canvas id="packageChart"></canvas></div>
                     </div>
                     <div class="card">
                         <h3>Gender Placement Comparison</h3>
-                        <div class="chart-container">
-                            <canvas id="genderPlacementChart"></canvas>
-                        </div>
+                        <div class="chart-container"><canvas id="genderPlacementChart"></canvas></div>
+                    </div>
+                     <div class="card">
+                        <h3>CGPA Distribution</h3>
+                        <div class="chart-container"><canvas id="cgpaDistributionChart"></canvas></div>
+                    </div>
+                    <div class="card">
+                        <h3>Avg. CGPA: Placed vs. Not Placed</h3>
+                        <div class="chart-container"><canvas id="cgpaPlacedVsUnplacedChart"></canvas></div>
                     </div>
                 </div>
-
                 <div class="chart-row">
                     <div class="card wide-card">
-                        <h3>CGPA vs Package Correlation</h3>
-                        <div class="chart-container">
-                            <canvas id="cgpaPackageChart"></canvas>
-                        </div>
+                        <h3>CGPA vs Package Correlation (Placed Students)</h3>
+                        <div class="chart-container large-chart"><canvas id="cgpaPackageChart"></canvas></div>
                     </div>
                 </div>
-
                 <div class="chart-row">
                     <div class="card">
                         <h3>Top Recruiting Companies</h3>
-                        <div class="chart-container">
-                            <canvas id="companiesChart"></canvas>
-                        </div>
+                        <div class="chart-container"><canvas id="companiesChart"></canvas></div>
                     </div>
                     <div class="card">
-                        <h3>Most In-Demand Skills</h3>
-                        <div class="chart-container">
-                            <canvas id="skillsChart"></canvas>
-                        </div>
+                        <h3>Most In-Demand Skills (Placed)</h3>
+                        <div class="chart-container"><canvas id="skillsChart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -127,60 +133,53 @@
                 <div class="section-title">
                     <h2>Faculty Evaluations</h2>
                 </div>
-
+                 <div class="kpi-row">
+                    <div class="kpi-card">
+                        <h4>Overall Avg. Faculty Rating</h4>
+                        <p id="kpi-avg-rating">--</p>
+                    </div>
+                 </div>
                 <div class="summary-cards">
                     <div class="card">
-                        <h3>Average Ratings by Category</h3>
-                        <div class="chart-container">
-                            <canvas id="ratingsChart"></canvas>
-                        </div>
+                        <!-- *** CHANGE TITLE HERE *** -->
+                        <h3>Distribution of Ratings Given</h3>
+                        <!-- Canvas ID remains the same -->
+                        <div class="chart-container"><canvas id="ratingsChart"></canvas></div>
                     </div>
                     <div class="card">
-                        <h3>Department Teaching Ratings</h3>
-                        <div class="chart-container">
-                            <canvas id="deptRatingsChart"></canvas>
-                        </div>
+                        <h3>Department Teaching Ratings <span class="comparison-note" id="dept-rating-comparison-note"></span></h3>
+                        <div class="chart-container"><canvas id="deptRatingsChart"></canvas></div>
                     </div>
                     <div class="card">
-                        <h3>Semester Rating Comparison</h3>
-                        <div class="chart-container">
-                            <canvas id="facultySemesterChart"></canvas>
-                        </div>
+                         <h3>Rating Comparison by Semester</h3>
+                        <div class="chart-container"><canvas id="facultySemesterChart"></canvas></div>
                     </div>
                 </div>
-
                 <div class="chart-row">
-                    <div class="card wide-card">
+                     <div class="card wide-card">
                         <h3>Overall Faculty Rating Trend (Yearly)</h3>
-                        <div class="chart-container">
-                            <canvas id="ratingTrendsChart"></canvas>
-                        </div>
+                        <div class="chart-container large-chart"><canvas id="ratingTrendsChart"></canvas></div>
                     </div>
                 </div>
-
                 <div class="chart-row">
                     <div class="card">
                         <h3>Top Rated Faculty</h3>
-                        <div class="chart-container">
-                            <canvas id="topFacultyChart"></canvas>
-                        </div>
+                        <div class="chart-container"><canvas id="topFacultyChart"></canvas></div>
                     </div>
                     <div class="card">
                         <h3>Top Rated Courses</h3>
-                        <div class="chart-container">
-                            <canvas id="courseRatingChart"></canvas>
-                        </div>
+                        <div class="chart-container"><canvas id="courseRatingChart"></canvas></div>
                     </div>
                 </div>
             </div>
         </div>
 
         <footer class="footer">
-            <p>© 2025 Comprehensive Student Dashboard | Data sourced from AWS S3</p>
+            <p>© 2025 Comprehensive Student Dashboard | Data sourced via Boto3/AWS S3</p> <!-- Updated text -->
         </footer>
     </div>
 
-    <!-- Make sure script is loaded at the end -->
+    <!-- JS -->
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 </html>

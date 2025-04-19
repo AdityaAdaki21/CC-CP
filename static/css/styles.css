@@ -7,150 +7,283 @@
 }
 
 body {
-    background-color: #f5f7fb;
-    color: #333;
+    background-color: #f5f7fb; /* Light blue-gray background */
+    color: #343a40; /* Darker gray text */
+    line-height: 1.6;
 }
 
+/* --- Loading Indicator Styles --- */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(255, 255, 255, 0.9); /* Slightly stronger overlay */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: opacity 0.4s ease-in-out, visibility 0.4s;
+    opacity: 1;
+    visibility: visible;
+}
+
+.loading-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.loading-spinner {
+    border: 6px solid #e9ecef; /* Lighter gray */
+    border-top: 6px solid #007bff; /* Bootstrap primary blue */
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 1.2s linear infinite;
+    margin-bottom: 1.5rem;
+}
+
+.loading-overlay p {
+    font-size: 1.1rem;
+    color: #495057; /* Medium gray */
+    font-weight: 500;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- Dashboard & Header --- */
 .dashboard {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    opacity: 1;
+    transition: opacity 0.3s ease-in-out;
+}
+
+.dashboard.loading {
+    opacity: 0.6; /* Dim background when loading */
 }
 
 .header {
-    background-color: #3a86ff;
+    background-color: #007bff; /* Bootstrap primary blue */
     color: white;
-    padding: 1.5rem 2rem;
+    padding: 2rem;
     text-align: center;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    position: relative; /* Needed for absolute positioning of potential error message */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+
+/* Global Error Message Styling */
+.global-error {
+    background-color: #dc3545; /* Bootstrap danger red */
+    color: white;
+    padding: 12px 20px;
+    margin: 15px auto 0 auto; /* Below title/p, centered */
+    border-radius: 6px;
+    text-align: center;
+    font-size: 0.95rem;
+    max-width: 90%;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    display: none; /* Hidden by default, shown by JS */
 }
 
 .header h1 {
-    margin-bottom: 0.5rem;
-    font-size: 2rem;
+    margin-bottom: 0.75rem;
+    font-size: 2.2rem;
+    font-weight: 600;
 }
 
 .header p {
-    margin-bottom: 1.5rem;
-    font-size: 1rem;
+    margin-bottom: 1.8rem; /* More space before tabs/error */
+    font-size: 1.05rem;
     opacity: 0.9;
+    max-width: 800px; /* Prevent subtitle being too wide */
+    margin-left: auto;
+    margin-right: auto;
 }
 
+/* --- Tab Navigation --- */
+.tab-navigation {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.tab-button {
+    background-color: rgba(255, 255, 255, 0.15);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3); /* Subtle border */
+    padding: 0.8rem 1.8rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all 0.25s ease;
+}
+
+.tab-button:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+}
+
+.tab-button.active {
+    background-color: white;
+    color: #007bff;
+    font-weight: 600;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(0);
+    border-color: transparent;
+}
+
+/* --- Main Content & Sections --- */
 .main-content {
     flex: 1;
-    padding: 2rem;
-    max-width: 1400px;
+    padding: 2.5rem; /* More padding */
+    max-width: 1700px; /* Wider dashboard */
     margin: 0 auto;
     width: 100%;
 }
 
 .section-title {
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid #eaeaea;
+    margin-bottom: 2rem; /* Increased spacing */
+    padding-bottom: 0.8rem;
+    border-bottom: 2px solid #dee2e6; /* Lighter border */
 }
 
 .section-title h2 {
-    font-size: 1.5rem;
-    color: #444;
+    font-size: 1.7rem;
+    color: #343a40;
+    font-weight: 600;
 }
 
+/* --- KPI Row Styles --- */
+.kpi-row {
+    display: grid;
+    /* Adjust number of columns based on viewport */
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2.5rem; /* More space after KPIs */
+}
+
+.kpi-card {
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 1.2rem 1.5rem;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.07);
+    text-align: center;
+    border-left: 6px solid #17a2b8; /* Bootstrap info cyan */
+    transition: all 0.2s ease-in-out;
+}
+.kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.kpi-card h4 {
+    margin-bottom: 0.6rem;
+    color: #6c757d; /* Medium gray */
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+
+.kpi-card p {
+    font-size: 2rem;
+    color: #343a40;
+    font-weight: 700;
+    line-height: 1.2; /* Adjust line height */
+}
+
+/* Give different KPIs slightly different accent colors */
+.kpi-row .kpi-card:nth-child(2) { border-left-color: #28a745; } /* Green */
+.kpi-row .kpi-card:nth-child(3) { border-left-color: #ffc107; } /* Yellow */
+.kpi-row .kpi-card:nth-child(4) { border-left-color: #fd7e14; } /* Orange */
+
+
+/* --- Card and Chart Layout --- */
 .summary-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 1.5rem;
+    /* Allow cards to determine size, fit as many as possible */
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); /* Increase min width */
+    gap: 1.8rem; /* Slightly more gap */
+    margin-bottom: 2.5rem; /* More space after cards */
 }
 
 .chart-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 1.5rem;
+    /* Default to two columns, stack earlier */
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr));
+    gap: 1.8rem;
+    margin-bottom: 2.5rem;
 }
 
 .card {
     background-color: white;
-    border-radius: 10px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* Slightly increased shadow */
-    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    border-radius: 12px; /* Smoother corners */
+    padding: 1.8rem; /* More padding */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Prevent content overflow */
 }
 .card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
 }
-
 
 .wide-card {
     grid-column: 1 / -1;
 }
 
 .card h3 {
-    margin-bottom: 1rem;
-    color: #444;
-    font-size: 1.2rem;
+    margin-bottom: 1.2rem;
+    color: #343a40;
+    font-size: 1.25rem; /* Slightly larger title */
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid #eee; /* subtle separator */
+    padding-bottom: 0.6rem;
 }
 
-.footer {
-    background-color: #333;
-    color: white;
-    text-align: center;
-    padding: 1rem;
-    margin-top: auto;
+.card h3 .comparison-note {
+    font-size: 0.8rem;
+    font-weight: normal;
+    color: #6c757d;
+    margin-left: 10px;
+    white-space: nowrap; /* Prevent wrap */
+    display: none; /* Hide initially, shown by JS */
 }
 
-/* Chart container styling */
 .chart-container {
     position: relative;
-    /* Increased height for better label visibility */
-    height: 300px;
+    /* Adjusted default heights */
+    height: 300px; /* Default */
     width: 100%;
     margin-top: 1rem;
+    flex-grow: 1; /* Allows container to fill space */
 }
 
 .summary-cards .chart-container {
-    /* Slightly smaller height for summary cards */
-    height: 200px;
+    height: 280px; /* Height for charts in summary row */
+}
+.chart-container.large-chart {
+    height: 400px; /* Increased height for wide/detailed charts */
 }
 
-
-/* Tab Navigation */
-.tab-navigation {
-    margin-top: 1.5rem;
-    display: flex;
-    justify-content: center;
-    gap: 1rem;
-}
-
-.tab-button {
-    background-color: rgba(255, 255, 255, 0.2);
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background-color 0.2s, transform 0.1s;
-}
-
-.tab-button:hover {
-    background-color: rgba(255, 255, 255, 0.3);
-    transform: translateY(-1px);
-}
-
-.tab-button.active {
-    background-color: white; /* White background for active tab */
-    color: #3a86ff; /* Use header blue for text */
-    font-weight: bold;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
-/* Tab Content */
+/* --- Tab Content --- */
 .tab-content {
     display: none;
-    animation: fadeIn 0.5s ease-in-out; /* Add fade-in animation */
+    animation: fadeIn 0.6s ease-out; /* Slightly longer fade */
 }
 
 .tab-content.active {
@@ -158,46 +291,78 @@ body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Footer --- */
+.footer {
+    background-color: #343a40; /* Dark Gray */
+    color: #f8f9fa; /* Lighter text */
+    text-align: center;
+    padding: 2rem; /* More padding */
+    margin-top: auto;
+    font-size: 0.9rem;
+}
+
+/* --- Responsive adjustments --- */
+@media (max-width: 1400px) {
+     .main-content {
+         max-width: 90%;
+     }
+      .chart-container.large-chart {
+         height: 350px; /* Adjust large chart height */
+     }
 }
 
 
-/* Responsive adjustments */
-@media (max-width: 992px) { /* Adjusted breakpoint */
-    .chart-row {
-         /* Keep side-by-side longer */
-         grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+@media (max-width: 992px) {
+    .kpi-row {
+         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     }
+     .kpi-card p {
+        font-size: 1.7rem;
+    }
+     .summary-cards {
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+     }
+    .chart-row {
+        /* Allow stacking */
+         grid-template-columns: 1fr;
+    }
+     .card h3 { font-size: 1.15rem; }
 }
 
 @media (max-width: 768px) {
-    .chart-row {
-        grid-template-columns: 1fr; /* Stack charts on smaller screens */
-    }
-    .summary-cards {
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Adjust summary cards */
-    }
-
-    .main-content {
-        padding: 1rem;
-    }
-
-    .header h1 {
-        font-size: 1.6rem; /* Slightly larger than before */
-    }
-    .header p {
-        font-size: 0.9rem;
-    }
-
+     .header { padding: 1.5rem; }
+     .header h1 { font-size: 1.8rem; }
+     .header p { font-size: 1rem; margin-bottom: 1.5rem; }
+     .main-content { padding: 1.5rem; }
+     .kpi-card { padding: 1rem 1.2rem; }
+     .kpi-card h4 { font-size: 0.8rem; }
+     .kpi-card p { font-size: 1.5rem; }
     .tab-navigation {
         flex-direction: column;
-        align-items: center;
-        gap: 0.5rem;
+        align-items: stretch;
+        gap: 0.6rem;
     }
+    .tab-button { width: 100%; padding: 0.7rem 1.5rem; }
+}
 
-    .tab-button {
-        width: 90%; /* Use percentage width */
-        max-width: 300px; /* Max width */
-    }
+@media (max-width: 576px) {
+    .summary-cards {
+          grid-template-columns: 1fr; /* Stack all cards */
+     }
+      .kpi-row {
+         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); /* Smaller min for KPIs */
+         gap: 1rem;
+     }
+      .header h1 { font-size: 1.6rem; }
+      .card { padding: 1.5rem; }
+      .chart-container,
+      .summary-cards .chart-container,
+      .chart-container.large-chart {
+        height: 280px; /* More consistent height on mobile */
+      }
+      .footer { padding: 1.5rem; }
 }

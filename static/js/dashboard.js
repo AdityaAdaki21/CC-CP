@@ -1,420 +1,529 @@
 // static/js/dashboard.js
 
-// Chart.js defaults for consistent styling
+// Chart.js defaults
 Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
 Chart.defaults.font.size = 12;
-Chart.defaults.color = '#666'; // Default text color for charts
+Chart.defaults.color = '#6c757d'; // Use a slightly muted gray
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+Chart.defaults.plugins.tooltip.titleFont = { weight: 'bold', size: 14 };
+Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
+Chart.defaults.plugins.tooltip.padding = 12;
+Chart.defaults.plugins.tooltip.cornerRadius = 5;
+Chart.defaults.plugins.tooltip.displayColors = false; // cleaner tooltip without color box
+
+// --- UI Elements ---
+const loadingIndicator = document.getElementById('loading-indicator');
+const dashboardElement = document.querySelector('.dashboard');
+const headerElement = document.querySelector('.header');
 
 // --- Data Fetching and Error Handling ---
-
-// Fetch data from the API endpoint
 async function fetchDashboardData() {
+    showLoading();
     try {
         const response = await fetch('/api/data');
         if (!response.ok) {
-            // Try to get error message from response body if possible
-            let errorBody = 'Server responded with status ' + response.status;
+            let errorBody = `Server responded with ${response.status} ${response.statusText}`;
             try {
                 const errorJson = await response.json();
+                // Use detailed error from backend if available
                 errorBody = errorJson.error || errorJson.message || JSON.stringify(errorJson);
-            } catch (e) { /* Ignore if body isn't valid JSON */ }
-            console.error('Network response was not ok:', errorBody);
+            } catch (e) { /* Ignore if body isn't JSON */ }
             throw new Error(errorBody);
         }
         const data = await response.json();
-        console.log("Data fetched successfully:", data); // Log fetched data for debugging
+        console.log("API Data Received:", JSON.parse(JSON.stringify(data))); // Deep copy log
+        // Check if backend explicitly sent an error object for a section
+        if (data.exam_data?.error || data.placement_data?.error || data.faculty_data?.error) {
+             console.warn("Data fetched but contains errors in sections:", data);
+        }
+        hideLoading();
         return data;
     } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        // Display a global error message
-        displayGlobalErrorMessage(`Failed to load dashboard data: ${error.message}. Please check console and backend logs.`);
-        return null; // Indicate failure
+        console.error('Fatal Error fetching dashboard data:', error);
+        displayGlobalErrorMessage(`Could not load dashboard: ${error.message}. Check network or backend logs.`);
+        hideLoading();
+        return null;
     }
 }
 
-// Function to display a global error message (e.g., in the header)
+function showLoading() {
+    if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+    if (dashboardElement) dashboardElement.classList.add('loading');
+}
+
+function hideLoading() {
+    if (loadingIndicator) loadingIndicator.classList.add('hidden');
+     if (dashboardElement) dashboardElement.classList.remove('loading');
+}
+
 function displayGlobalErrorMessage(message) {
-    const header = document.querySelector('.header');
-    if (header) {
-        let errorDiv = header.querySelector('.global-error');
-        if (!errorDiv) {
-            errorDiv = document.createElement('div');
-            errorDiv.className = 'global-error';
-            errorDiv.style.backgroundColor = '#dc3545'; // Red color for error
-            errorDiv.style.color = 'white';
-            errorDiv.style.padding = '10px';
-            errorDiv.style.marginTop = '15px'; // Add some space from header content
-            errorDiv.style.borderRadius = '5px';
-            errorDiv.style.textAlign = 'center';
-            errorDiv.style.fontSize = '0.9rem';
-            // Insert after the h1 and p, before tab navigation if possible
-            const tabNav = header.querySelector('.tab-navigation');
-            if (tabNav) {
-                 header.insertBefore(errorDiv, tabNav);
-            } else {
-                 header.appendChild(errorDiv);
-            }
-
-        }
-        errorDiv.textContent = message;
-    } else {
-        // Fallback if header isn't found
-        alert("Critical Error: " + message);
+    if (!headerElement) return;
+    let errorDiv = headerElement.querySelector('.global-error');
+    if (!errorDiv) {
+        errorDiv = document.createElement('div');
+        errorDiv.className = 'global-error';
+        // Insert after the header's H1/P but before tab navigation
+        const refElement = headerElement.querySelector('.tab-navigation') || headerElement.lastElementChild;
+        headerElement.insertBefore(errorDiv, refElement);
     }
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
 }
 
-// Helper function to display errors directly on chart canvases
-function displayErrorOnChart(canvasId, message = 'Error loading data') {
+function clearGlobalErrorMessage() {
+     const errorDiv = headerElement?.querySelector('.global-error');
+     if (errorDiv) errorDiv.style.display = 'none';
+}
+
+function displayErrorOnChart(canvasId, message = 'Error loading chart data') {
     const canvas = document.getElementById(canvasId);
-    if (!canvas) {
-        console.warn(`Canvas element with ID ${canvasId} not found for error display.`);
+    const chartContainer = canvas ? canvas.closest('.chart-container') : null;
+    if (!canvas || !chartContainer) {
+        console.warn(`Canvas or container not found for ID: ${canvasId}`);
         return;
     }
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-        // Destroy existing chart instance if it exists
-        let chartInstance = Chart.getChart(canvasId);
-        if (chartInstance) {
-            chartInstance.destroy();
-        }
-        // Display error message centered on the canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
-        ctx.save();
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#dc3545'; // Error color
-        ctx.font = "bold 14px 'Segoe UI'"; // Make error text noticeable
-        // Wrap text if needed (basic wrapping)
-        const maxWidth = canvas.width * 0.8;
-        const words = message.split(' ');
-        let line = '';
-        let y = canvas.height / 2 - 10; // Start slightly above center if multiple lines
-        const lineHeight = 18;
 
-        for (let n = 0; n < words.length; n++) {
-            let testLine = line + words[n] + ' ';
-            let metrics = ctx.measureText(testLine);
-            let testWidth = metrics.width;
-            if (testWidth > maxWidth && n > 0) {
-                ctx.fillText(line.trim(), canvas.width / 2, y); // Trim trailing space
-                line = words[n] + ' ';
-                y += lineHeight;
-            } else {
-                line = testLine;
-            }
-        }
-         ctx.fillText(line.trim(), canvas.width / 2, y); // Draw the last line, trimmed
-        ctx.restore();
+    // Destroy existing chart instance
+    let chartInstance = Chart.getChart(canvasId);
+    if (chartInstance) chartInstance.destroy();
+
+    // Create or reuse error message div within the container
+    let errorMsgElement = chartContainer.querySelector('.chart-error-message');
+    if (!errorMsgElement) {
+        errorMsgElement = document.createElement('div');
+        errorMsgElement.className = 'chart-error-message';
+        errorMsgElement.style.position = 'absolute';
+        errorMsgElement.style.inset = '0';
+        errorMsgElement.style.display = 'flex';
+        errorMsgElement.style.justifyContent = 'center';
+        errorMsgElement.style.alignItems = 'center';
+        errorMsgElement.style.padding = '15px';
+        errorMsgElement.style.color = '#dc3545'; // Danger color
+        errorMsgElement.style.backgroundColor = 'rgba(255, 255, 255, 0.9)'; // slight bg
+        errorMsgElement.style.textAlign = 'center';
+        errorMsgElement.style.fontSize = '13px';
+        errorMsgElement.style.fontWeight = '500';
+        errorMsgElement.style.zIndex = '10';
+        errorMsgElement.style.borderRadius = 'inherit'; // Match card corner radius
+        chartContainer.appendChild(errorMsgElement);
     }
+
+    // Hide the canvas, show the error message
+    canvas.style.display = 'none';
+    errorMsgElement.textContent = message;
+    errorMsgElement.style.display = 'flex';
+}
+
+function clearErrorOnChart(canvasId) {
+     const canvas = document.getElementById(canvasId);
+     const chartContainer = canvas ? canvas.closest('.chart-container') : null;
+     if (!chartContainer) return;
+
+     const errorMsgElement = chartContainer.querySelector('.chart-error-message');
+     if (errorMsgElement) errorMsgElement.style.display = 'none'; // Hide the error
+     if (canvas) canvas.style.display = 'block'; // Show the canvas
 }
 
 
 // --- Initialization Functions ---
 
-// Initialize Academic Performance Charts
+function updateKPI(elementId, value, unit = '', notAvailableText = 'N/A') {
+    const element = document.getElementById(elementId);
+     if (element) {
+        // Check for null, undefined, or empty string. Allows 0.
+        if (value !== null && typeof value !== 'undefined' && value !== '') {
+            element.textContent = `${value}${unit}`; // Unit is appended only if value exists
+        } else {
+            element.textContent = notAvailableText;
+        }
+    }
+}
+
+function updateComparisonNote(elementId, value, unit = '', prefix = 'Overall Avg: ') {
+    const element = document.getElementById(elementId);
+     if (element) {
+        // Check if value is a valid number or a non-empty string (like "75.5%")
+        const isValidNumber = typeof value === 'number' && !isNaN(value);
+        const isValidString = typeof value === 'string' && value.trim() !== '';
+
+         if (isValidNumber || isValidString) {
+             element.textContent = `(${prefix}${value}${unit})`;
+             element.style.display = 'inline'; // Show note
+         } else {
+             element.style.display = 'none'; // Hide note
+         }
+     }
+}
+
+// --- Section Initializers ---
+
 function initializeExamCharts(examData) {
-     if (!examData || examData.error) {
+    // --- KPIs & Global Error Handling ---
+    if (!examData || examData.error) {
         const errorMsg = examData?.error || "Exam data unavailable";
         console.error("Exam data error:", errorMsg);
-        // Display error on all relevant charts for this tab
+        // Display errors on all canvases for this section
         displayErrorOnChart('gradeChart', errorMsg);
         displayErrorOnChart('departmentPerformanceChart', errorMsg);
         displayErrorOnChart('topSubjectsChart', errorMsg);
         displayErrorOnChart('marksComparisonChart', errorMsg);
         displayErrorOnChart('semesterChart', errorMsg);
-        // The 'subjectAnalysisChart' canvas was removed from HTML, so no error needed here.
-        return; // Stop initialization for this section
+        // Update KPIs to show error/NA
+        updateKPI('kpi-avg-mark', null, '', 'Error');
+        updateKPI('kpi-grade-overview', null, '', 'Error');
+        updateComparisonNote('dept-perf-comparison-note', null); // Clear note
+        return;
     }
 
-    // Grade Distribution
+    // --- Clear Previous Errors ---
+    clearErrorOnChart('gradeChart');
+    clearErrorOnChart('departmentPerformanceChart');
+    clearErrorOnChart('topSubjectsChart');
+    clearErrorOnChart('marksComparisonChart');
+    clearErrorOnChart('semesterChart');
+
+    // --- Update KPIs ---
+    updateKPI('kpi-avg-mark', examData.kpi_overall_avg_mark);
     if (examData.grade_distribution && Object.keys(examData.grade_distribution).length > 0) {
+        // Find grade with highest count
+         const mostCommonGrade = Object.entries(examData.grade_distribution)
+             .sort(([, countA], [, countB]) => countB - countA)[0]?.[0]; // Get key of first entry after sort
+         updateKPI('kpi-grade-overview', mostCommonGrade || 'N/A', '', 'N/A');
+     } else {
+         updateKPI('kpi-grade-overview', null); // Use default 'N/A'
+     }
+
+
+    // --- Create Charts ---
+
+    // Grade Distribution (Pie)
+    if (examData.grade_distribution && Object.values(examData.grade_distribution).some(v => v > 0)) {
         createPieChart('gradeChart', examData.grade_distribution);
     } else {
-        displayErrorOnChart('gradeChart', 'No Grade Distribution data');
+        displayErrorOnChart('gradeChart', 'No Grade Distribution data found');
     }
 
-    // Department Performance
+    // Department Performance (Bar)
+     const overallAvgMark = examData.kpi_overall_avg_mark;
     if (examData.performance_by_department && Object.keys(examData.performance_by_department).length > 0) {
-        createBarChart('departmentPerformanceChart', examData.performance_by_department, 'Average Marks', 100);
+        createBarChart('departmentPerformanceChart', examData.performance_by_department, 'Avg Mark', 100); // Scale 0-100
+        updateComparisonNote('dept-perf-comparison-note', overallAvgMark);
     } else {
-         displayErrorOnChart('departmentPerformanceChart', 'No Department Performance data');
+         displayErrorOnChart('departmentPerformanceChart', 'No Department Performance data found');
+          updateComparisonNote('dept-perf-comparison-note', null);
     }
 
-    // Top Performing Subjects
+    // Top Performing Subjects (Horizontal Bar)
     if (examData.subject_performance && Object.keys(examData.subject_performance).length > 0) {
-        createHorizontalBarChart('topSubjectsChart', examData.subject_performance, 'Average Marks', 100);
+        createHorizontalBarChart('topSubjectsChart', examData.subject_performance, 'Avg Mark', 100); // Scale 0-100
     } else {
-        displayErrorOnChart('topSubjectsChart', 'No Top Subject Performance data');
+        displayErrorOnChart('topSubjectsChart', 'No Top Subject Performance data found');
     }
 
-    // Internal vs External Marks Comparison
-    // Check if data exists and has the required keys (even if values are 0, chart can render that)
-    if (examData.marks_comparison && typeof examData.marks_comparison.Internal !== 'undefined' && typeof examData.marks_comparison.External !== 'undefined') {
-        // Check if data is explicitly null which we set in python on keyerror
-         if (examData.marks_comparison.Internal === null || examData.marks_comparison.External === null) {
-             displayErrorOnChart('marksComparisonChart', 'Internal/External exam types not found in data');
-         } else {
-             createMarksComparisonChart('marksComparisonChart', examData.marks_comparison);
-         }
-    } else {
-        displayErrorOnChart('marksComparisonChart', 'Internal/External marks data structure incorrect');
-    }
+    // Internal vs External Marks Comparison (Bar)
+     const comparisonData = {};
+     let hasComparisonData = false;
+     if (examData.marks_comparison) {
+          if (examData.marks_comparison.Internal !== null && typeof examData.marks_comparison.Internal === 'number') {
+              comparisonData.Internal = examData.marks_comparison.Internal;
+              hasComparisonData = true;
+          }
+           if (examData.marks_comparison.External !== null && typeof examData.marks_comparison.External === 'number') {
+              comparisonData.External = examData.marks_comparison.External;
+              hasComparisonData = true;
+          }
+     }
+     if (hasComparisonData) {
+          createMarksComparisonChart('marksComparisonChart', comparisonData);
+     } else {
+          displayErrorOnChart('marksComparisonChart', 'Internal/External mark data unavailable or invalid');
+     }
 
-     // Semester Performance Trend
-    if (examData.semester_performance && Object.keys(examData.semester_performance).length > 0) {
-        createTrendChart('semesterChart', examData.semester_performance, 'Average Marks');
+     // Yearly Performance Trend (Line) - using 'semester_performance' key from backend
+     if (examData.semester_performance && Object.keys(examData.semester_performance).length > 1) { // Need > 1 point for a trend
+         createTrendChart('semesterChart', examData.semester_performance, 'Avg Marks');
+    } else if (examData.semester_performance && Object.keys(examData.semester_performance).length === 1){
+        displayErrorOnChart('semesterChart', 'Only one data point found for yearly trend');
     } else {
-        displayErrorOnChart('semesterChart', 'No Semester Performance data');
+        displayErrorOnChart('semesterChart', 'No Yearly Performance Trend data found');
     }
-
-    // 'subjectAnalysisChart' was removed from HTML - no action needed.
 }
 
-// Initialize Placement Statistics Charts
 function initializePlacementCharts(placementData) {
+    // --- KPIs & Global Error Handling ---
     if (!placementData || placementData.error) {
         const errorMsg = placementData?.error || "Placement data unavailable";
         console.error("Placement data error:", errorMsg);
-        // Display error on all relevant charts
-        displayErrorOnChart('placementRateChart', errorMsg);
-        displayErrorOnChart('packageChart', errorMsg);
-        displayErrorOnChart('genderPlacementChart', errorMsg);
-        displayErrorOnChart('cgpaPackageChart', errorMsg);
-        displayErrorOnChart('companiesChart', errorMsg);
-        displayErrorOnChart('skillsChart', errorMsg);
-        return; // Stop initialization
+        // Display errors on all relevant charts
+        const chartIds = ['placementRateChart', 'packageChart', 'genderPlacementChart',
+                          'cgpaPackageChart', 'companiesChart', 'skillsChart',
+                          'cgpaDistributionChart', 'cgpaPlacedVsUnplacedChart'];
+        chartIds.forEach(id => displayErrorOnChart(id, errorMsg));
+        // Update KPIs
+        updateKPI('kpi-placement-rate', null, '', 'Error');
+        updateKPI('kpi-avg-package', null, ' LPA', 'Error');
+        updateComparisonNote('placement-rate-comparison-note', null);
+        updateComparisonNote('package-dept-comparison-note', null);
+        return;
     }
 
-    // Placement Rate by Department
+    // --- Clear Previous Errors ---
+    const chartIds = ['placementRateChart', 'packageChart', 'genderPlacementChart',
+                      'cgpaPackageChart', 'companiesChart', 'skillsChart',
+                      'cgpaDistributionChart', 'cgpaPlacedVsUnplacedChart'];
+    chartIds.forEach(clearErrorOnChart);
+
+    // --- Update KPIs ---
+    updateKPI('kpi-placement-rate', placementData.kpi_overall_placement_rate); // Already formatted string % or null
+    updateKPI('kpi-avg-package', placementData.kpi_overall_avg_package, ' LPA');
+
+    // --- Create Charts ---
+
+    // Placement Rate by Department (Bar, Percentage)
+    const overallPlacementRate = placementData.kpi_overall_placement_rate; // String e.g., "75.5%"
     if (placementData.placement_rate_by_dept && Object.keys(placementData.placement_rate_by_dept).length > 0) {
         createBarChart('placementRateChart', placementData.placement_rate_by_dept, 'Placement Rate', 1, true); // percent = true
+        updateComparisonNote('placement-rate-comparison-note', overallPlacementRate, '', 'Overall: ');
     } else {
-        displayErrorOnChart('placementRateChart', 'No Placement Rate data');
+        displayErrorOnChart('placementRateChart', 'No Department Placement Rate data found');
+         updateComparisonNote('placement-rate-comparison-note', null);
     }
 
-    // Average Package by Department
+    // Average Package by Department (Bar)
+    const overallAvgPackage = placementData.kpi_overall_avg_package;
     if (placementData.package_by_dept && Object.keys(placementData.package_by_dept).length > 0) {
-        createBarChart('packageChart', placementData.package_by_dept, 'Average Package (LPA)', null);
+        createBarChart('packageChart', placementData.package_by_dept, 'Avg Package (LPA)', null);
+        updateComparisonNote('package-dept-comparison-note', overallAvgPackage, ' LPA', 'Overall Avg: ');
     } else {
-         displayErrorOnChart('packageChart', 'No Average Package data');
+         displayErrorOnChart('packageChart', 'No Avg Package by Department data found');
+          updateComparisonNote('package-dept-comparison-note', null);
     }
 
-    // Gender Placement Comparison
+    // Gender Placement Comparison (Stacked Bar)
     if (placementData.gender_placement && typeof placementData.gender_placement === 'object' && Object.keys(placementData.gender_placement).length > 0 && !placementData.gender_placement.error) {
-         // Check if there's actual count data inside the gender objects
-         const hasGenderData = Object.values(placementData.gender_placement).some(counts => (counts['0'] || 0) + (counts['1'] || 0) > 0);
-         if (hasGenderData) {
-             createStackedBarChart('genderPlacementChart', placementData.gender_placement);
-         } else {
-             displayErrorOnChart('genderPlacementChart', 'No Gender Placement counts (all zero)');
-         }
+        const hasCounts = Object.values(placementData.gender_placement).some(counts => (parseInt(counts['0']||0) + parseInt(counts['1']||0)) > 0);
+        if (hasCounts) {
+            createStackedBarChart('genderPlacementChart', placementData.gender_placement);
+        } else {
+             displayErrorOnChart('genderPlacementChart', 'No counts found for Gender Placement');
+        }
     } else {
-        const specificError = placementData.gender_placement?.error ? `: ${placementData.gender_placement.error}` : ' available';
-        displayErrorOnChart('genderPlacementChart', 'No Gender Placement data' + specificError);
+        displayErrorOnChart('genderPlacementChart', placementData.gender_placement?.error || 'Gender Placement data unavailable');
     }
 
-    // CGPA vs Package Correlation
-    if (placementData.cgpa_package_data && placementData.cgpa_package_data.cgpa?.length > 0 && placementData.cgpa_package_data.package?.length > 0 && placementData.cgpa_package_data.cgpa.length === placementData.cgpa_package_data.package.length) {
+    // CGPA Distribution (Bar)
+    if (placementData.cgpa_distribution && Object.keys(placementData.cgpa_distribution).length > 0 && !placementData.cgpa_distribution.error) {
+        createBarChart('cgpaDistributionChart', placementData.cgpa_distribution, 'No. of Students', null);
+    } else {
+        displayErrorOnChart('cgpaDistributionChart', placementData.cgpa_distribution?.error || 'CGPA Distribution data unavailable');
+    }
+
+    // Avg CGPA Placed vs. Not Placed (Bar)
+    if (placementData.avg_cgpa_by_placement && Object.keys(placementData.avg_cgpa_by_placement).length > 0 && !placementData.avg_cgpa_by_placement.error) {
+         createBarChart('cgpaPlacedVsUnplacedChart', placementData.avg_cgpa_by_placement, 'Average CGPA', 10); // Max CGPA 10
+    } else {
+         displayErrorOnChart('cgpaPlacedVsUnplacedChart', placementData.avg_cgpa_by_placement?.error || 'Avg CGPA comparison unavailable');
+    }
+
+    // CGPA vs Package (Scatter)
+    if (placementData.cgpa_package_data && placementData.cgpa_package_data.cgpa?.length > 0) { // Check length after backend ensures match
         createScatterPlot('cgpaPackageChart', placementData.cgpa_package_data);
     } else {
-         let errorMsg = 'No CGPA vs Package data';
-         if (placementData.cgpa_package_data && (placementData.cgpa_package_data.cgpa?.length !== placementData.cgpa_package_data.package?.length)) {
-             errorMsg = 'CGPA vs Package data length mismatch';
-         }
-         displayErrorOnChart('cgpaPackageChart', errorMsg);
+        displayErrorOnChart('cgpaPackageChart', 'Insufficient data for CGPA vs Package plot');
     }
 
-    // Top Recruiting Companies
+    // Top Recruiting Companies (Horizontal Bar)
     if (placementData.top_companies && Object.keys(placementData.top_companies).length > 0 && !placementData.top_companies.error) {
-        createHorizontalBarChart('companiesChart', placementData.top_companies, 'Number of Placements', null);
+        createHorizontalBarChart('companiesChart', placementData.top_companies, 'No. of Placements');
     } else {
-         const specificError = placementData.top_companies?.error ? `: ${placementData.top_companies.error}` : ' available';
-         displayErrorOnChart('companiesChart', 'No Top Recruiting Companies data' + specificError);
+         displayErrorOnChart('companiesChart', placementData.top_companies?.error || 'Top Companies data unavailable');
     }
 
-    // Most In-Demand Skills
+    // Most In-Demand Skills (Horizontal Bar)
     if (placementData.top_skills && Object.keys(placementData.top_skills).length > 0 && !placementData.top_skills.error) {
-        createHorizontalBarChart('skillsChart', placementData.top_skills, 'Frequency', null);
+        createHorizontalBarChart('skillsChart', placementData.top_skills, 'Frequency');
     } else {
-        const specificError = placementData.top_skills?.error ? `: ${placementData.top_skills.error}` : ' available';
-        displayErrorOnChart('skillsChart', 'No Top Skills data' + specificError);
+        displayErrorOnChart('skillsChart', placementData.top_skills?.error || 'Top Skills data unavailable');
     }
 }
 
-// Initialize Faculty Evaluation Charts
 function initializeFacultyCharts(facultyData) {
+    // --- KPIs & Global Error Handling ---
     if (!facultyData || facultyData.error) {
         const errorMsg = facultyData?.error || "Faculty data unavailable";
         console.error("Faculty data error:", errorMsg);
-        displayErrorOnChart('ratingsChart', errorMsg);
-        displayErrorOnChart('deptRatingsChart', errorMsg);
-        displayErrorOnChart('facultySemesterChart', errorMsg);
-        displayErrorOnChart('ratingTrendsChart', errorMsg); // Keep error display target
-        displayErrorOnChart('topFacultyChart', errorMsg);
-        displayErrorOnChart('courseRatingChart', errorMsg);
-        return; // Stop initialization
+        const chartIds = ['ratingsChart', 'deptRatingsChart', 'facultySemesterChart',
+                          'ratingTrendsChart', 'topFacultyChart', 'courseRatingChart'];
+        // Use the specific error for the chart that was replaced if available
+        const ratingDistError = facultyData.rating_distribution?.error ? facultyData.rating_distribution.error : errorMsg;
+        chartIds.forEach(id => {
+            if (id === 'ratingsChart') {
+                 displayErrorOnChart(id, ratingDistError); // Show specific error if distribution failed
+            } else {
+                 displayErrorOnChart(id, errorMsg); // General error for others
+            }
+        });
+        updateKPI('kpi-avg-rating', null, '', 'Error');
+        updateComparisonNote('dept-rating-comparison-note', null);
+        return;
     }
 
-    // Average Ratings by Category (Radar Chart)
-    if (facultyData.avg_ratings && Object.keys(facultyData.avg_ratings).length > 0) {
-        createRadarChart('ratingsChart', facultyData.avg_ratings);
+    // --- Clear Previous Errors ---
+    const chartIds = ['ratingsChart', 'deptRatingsChart', 'facultySemesterChart',
+                       'ratingTrendsChart', 'topFacultyChart', 'courseRatingChart'];
+    chartIds.forEach(clearErrorOnChart);
+
+     // --- Update KPI ---
+     updateKPI('kpi-avg-rating', facultyData.kpi_overall_avg_rating);
+
+    // --- Create Charts ---
+
+    // *** REPLACED RADAR CHART ***
+    // Rating Distribution (Bar Chart)
+    if (facultyData.rating_distribution && Object.keys(facultyData.rating_distribution).length > 0 && !facultyData.rating_distribution.error) {
+        // Create bar chart: keys (1-5) on X-axis, counts on Y-axis
+        createBarChart('ratingsChart', facultyData.rating_distribution, 'Number of Reviews', null); // Max Y auto, not percent
     } else {
-        displayErrorOnChart('ratingsChart', 'No Average Faculty Rating data');
+        // Display error if distribution data is missing or backend indicated error
+        displayErrorOnChart('ratingsChart', facultyData.rating_distribution?.error || 'Rating Distribution data unavailable');
     }
 
-    // Department Teaching Ratings
+    // Department Teaching Ratings (Bar)
+    const overallAvgRating = facultyData.kpi_overall_avg_rating;
     if (facultyData.dept_teaching_ratings && Object.keys(facultyData.dept_teaching_ratings).length > 0) {
-        createBarChart('deptRatingsChart', facultyData.dept_teaching_ratings, 'Average Teaching Rating', 5);
+        createBarChart('deptRatingsChart', facultyData.dept_teaching_ratings, 'Avg Rating', 5);
+        updateComparisonNote('dept-rating-comparison-note', overallAvgRating, '', 'Overall Avg: ');
     } else {
-        displayErrorOnChart('deptRatingsChart', 'No Dept Teaching Rating data');
+        displayErrorOnChart('deptRatingsChart', 'Department Rating data unavailable');
+        updateComparisonNote('dept-rating-comparison-note', null);
     }
 
-    // Semester Comparison (Rating Trend) - Assuming 'semester_ratings' is overall avg per semester
+    // Semester Rating Comparison (Bar)
     if (facultyData.semester_ratings && Object.keys(facultyData.semester_ratings).length > 0) {
-         createTrendChart('facultySemesterChart', facultyData.semester_ratings, 'Average Rating'); // Use simple trend
+        createBarChart('facultySemesterChart', facultyData.semester_ratings, 'Avg Rating', 5);
     } else {
-         displayErrorOnChart('facultySemesterChart', 'No Semester Rating data');
+         displayErrorOnChart('facultySemesterChart', 'Semester Rating data unavailable');
     }
 
-    // *** MODIFICATION START ***
-    // Faculty Rating Trends (Yearly) - Use createTrendChart with the new data key
-    if (facultyData.yearly_average_trend && Object.keys(facultyData.yearly_average_trend).length > 0) {
-        // Use the existing createTrendChart function
-        createTrendChart('ratingTrendsChart', facultyData.yearly_average_trend, 'Overall Average Rating');
-    } else {
-        displayErrorOnChart('ratingTrendsChart', 'No Yearly Average Rating Trend data available');
+    // Overall Faculty Rating Trend (Yearly) (Line)
+    if (facultyData.yearly_average_trend && Object.keys(facultyData.yearly_average_trend).length > 1) {
+        createTrendChart('ratingTrendsChart', facultyData.yearly_average_trend, 'Overall Avg Rating');
+    } else if (facultyData.yearly_average_trend && Object.keys(facultyData.yearly_average_trend).length === 1){
+        displayErrorOnChart('ratingTrendsChart', 'Only one data point found for yearly rating trend');
     }
-    // *** MODIFICATION END ***
+     else {
+        displayErrorOnChart('ratingTrendsChart', 'Yearly Rating Trend data unavailable');
+    }
 
-
-    // Top Rated Faculty
+    // Top Rated Faculty (Horizontal Bar)
     if (facultyData.top_faculty && Object.keys(facultyData.top_faculty).length > 0) {
-        createHorizontalBarChart('topFacultyChart', facultyData.top_faculty, 'Average Rating', 5);
+        createHorizontalBarChart('topFacultyChart', facultyData.top_faculty, 'Avg Rating', 5);
     } else {
-        displayErrorOnChart('topFacultyChart', 'No Top Rated Faculty data');
+        displayErrorOnChart('topFacultyChart', 'Top Rated Faculty data unavailable');
     }
 
-    // Course Rating Comparison
+    // Top Rated Courses (Horizontal Bar)
     if (facultyData.course_ratings && Object.keys(facultyData.course_ratings).length > 0) {
-        createHorizontalBarChart('courseRatingChart', facultyData.course_ratings, 'Average Rating', 5);
+        createHorizontalBarChart('courseRatingChart', facultyData.course_ratings, 'Avg Rating', 5);
     } else {
-        displayErrorOnChart('courseRatingChart', 'No Course Rating data');
+        displayErrorOnChart('courseRatingChart', 'Top Rated Courses data unavailable');
     }
 }
 
 // --- Tab Navigation ---
-
-// Setup event listeners for tab buttons
 function setupTabNavigation() {
     const tabButtons = document.querySelectorAll('.tab-button');
     const tabContents = document.querySelectorAll('.tab-content');
 
-    // Pre-select the first tab on initial load
-    if (tabButtons.length > 0 && tabContents.length > 0) {
-        // Ensure only the first elements get the active class initially
-         tabButtons.forEach((btn, index) => btn.classList.toggle('active', index === 0));
-         tabContents.forEach((content, index) => content.classList.toggle('active', index === 0));
-    }
+    // Check if any tab is explicitly marked active in HTML, otherwise activate the first
+     const firstLoadActive = !Array.from(tabButtons).some(btn => btn.classList.contains('active'));
+     if (firstLoadActive && tabButtons.length > 0) {
+         tabButtons[0].classList.add('active');
+         if (tabContents.length > 0) tabContents[0].classList.add('active');
+     }
 
 
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
-            // Extract tabId from the onclick attribute (safer way)
             const onclickAttr = button.getAttribute('onclick');
             const match = onclickAttr ? onclickAttr.match(/showTab\('([^']+)'\)/) : null;
-            const targetTabId = match ? match[1] : null;
-            // const targetTabId = button.getAttribute('onclick')?.match(/'([^']+)'/)?.[1]; // Alternative shorter syntax
-
-            if (targetTabId) {
-                showTab(targetTabId);
-            } else {
-                console.error("Could not determine target tab ID for button:", button);
+            if (match && match[1]) {
+                showTab(match[1]);
             }
         });
     });
 }
 
-// Function to show a specific tab and hide others
 function showTab(tabId) {
-    // Remove active class from all tabs and buttons
-    document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.classList.remove('active');
-    });
+    document.querySelectorAll('.tab-content.active').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-button.active').forEach(button => button.classList.remove('active'));
 
-    // Add active class to the selected tab and its corresponding button
     const targetTab = document.getElementById(tabId);
-    // Find button more reliably by checking its onclick attribute content
     const targetButton = Array.from(document.querySelectorAll('.tab-button')).find(
-        button => button.getAttribute('onclick') === `showTab('${tabId}')`
+        btn => btn.getAttribute('onclick') === `showTab('${tabId}')`
     );
-    // const targetButton = document.querySelector(`[onclick="showTab('${tabId}')"]`); // Simpler query selector
 
+    if (targetTab) targetTab.classList.add('active');
+    if (targetButton) targetButton.classList.add('active');
 
-    if (targetTab) {
-        targetTab.classList.add('active');
-        console.log(`Activated tab: ${tabId}`); // Debug log
-    } else {
-         console.error(`Tab content with ID ${tabId} not found.`);
-    }
-
-    if (targetButton) {
-        targetButton.classList.add('active');
-        console.log(`Activated button for tab: ${tabId}`); // Debug log
-    } else {
-        console.error(`Tab button for tab ID ${tabId} not found.`);
-    }
+    console.log(`Switched to tab: ${tabId}`);
+    // Optional: Force redraw charts in the new tab if they render oddly
+    // window.dispatchEvent(new Event('resize'));
 }
 
 
 // --- Reusable Chart Creation Functions ---
 
-function createBarChart(elementId, data, label, maxValue, percent = false) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-    if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
-        return;
-    }
-    // Destroy existing chart instance if it exists
+function destroyChartIfExists(elementId) {
     let chartInstance = Chart.getChart(elementId);
     if (chartInstance) chartInstance.destroy();
+}
 
-    // Sort data by label for consistent order if needed (optional)
-    // const sortedKeys = Object.keys(data).sort();
-    // const sortedValues = sortedKeys.map(key => data[key]);
+function createBarChart(elementId, data, label, maxValue, percent = false) {
+    const canvas = document.getElementById(elementId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    clearErrorOnChart(elementId); // Clear previous errors before trying again
+    destroyChartIfExists(elementId);
+
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+        displayErrorOnChart(elementId, `No data available for chart`);
+        return;
+    }
+
+    // Prepare labels & values, potentially sorting keys alpha
+    const sortedKeys = Object.keys(data).sort();
+    const labels = sortedKeys;
+    const values = sortedKeys.map(key => data[key]);
+
 
     try {
         new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: Object.keys(data), // Use original keys for labels
+                labels: labels,
                 datasets: [{
                     label: label,
-                    data: Object.values(data), // Use original values
-                    backgroundColor: '#3a86ff', // Primary blue
-                    borderColor: '#3a86ff',
+                    data: values,
+                    backgroundColor: '#0d6efd', // Bootstrap primary slightly lighter
+                    borderColor: '#0d6efd',
                     borderWidth: 1,
-                    borderRadius: 5, // Rounded corners
-                    hoverBackgroundColor: '#2667ff' // Darker blue on hover
+                    borderRadius: 5,
+                    hoverBackgroundColor: '#0b5ed7' // Darker blue on hover
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: false // Often cleaner without legend for single dataset
-                    },
+                    legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)', // Darker tooltip
-                        titleFont: { weight: 'bold' },
                         callbacks: {
                             label: function(context) {
                                 let value = context.raw;
-                                if (typeof value !== 'number') return ''; // Handle non-numeric data gracefully
-                                return percent ? `${(value * 100).toFixed(1)}%` : value.toLocaleString(); // Format numbers if large
+                                if (typeof value !== 'number') return 'N/A';
+                                const formattedValue = percent ? `${(value * 100).toFixed(1)}%` : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                                return `${context.dataset.label}: ${formattedValue}`;
                             }
                         }
                     }
@@ -422,51 +531,45 @@ function createBarChart(elementId, data, label, maxValue, percent = false) {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        max: maxValue, // Optional max value (null or undefined lets Chart.js decide)
-                        grid: {
-                            color: '#e9ecef' // Lighter grid lines
-                        },
+                        max: maxValue, // Use maxValue if provided (e.g., 1 for %, 10 for CGPA, 5 for Rating)
+                        grid: { color: '#e9ecef', drawBorder: false },
                         ticks: {
-                            callback: function(value) {
-                                if (typeof value !== 'number') return '';
-                                return percent ? `${(value * 100).toFixed(0)}%` : value.toLocaleString();
-                            },
-                            color: '#495057' // Darker tick labels
-                        }
+                            color: '#6c757d', // Axis text color
+                            precision: percent ? 0 : undefined, // Control decimal places for ticks
+                             callback: function(value) {
+                                 if (percent) return `${(value * 100).toFixed(0)}%`;
+                                 // Format large numbers? e.g., > 1000 -> 1k
+                                 return value.toLocaleString();
+                            }
+                         }
                     },
                     x: {
-                         grid: {
-                             display: false // Hide vertical grid lines
-                         },
-                         ticks: {
-                             color: '#495057'
-                         }
+                         grid: { display: false },
+                         ticks: { color: '#6c757d', autoSkip: true, maxRotation: 45, minRotation: 0 } // Allow rotation for long labels
                     }
                 },
-                 // Add animation object for smoother loading (optional)
-                 animation: {
-                    duration: 800,
-                    easing: 'easeOutQuart'
-                }
+                animation: { duration: 700, easing: 'easeOutQuad' }
             }
         });
     } catch (error) {
         console.error(`Chart.js error creating Bar Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
+        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
     }
 }
 
 function createHorizontalBarChart(elementId, data, label, maxValue) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-     if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
+    const canvas = document.getElementById(elementId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    clearErrorOnChart(elementId);
+    destroyChartIfExists(elementId);
+
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+        displayErrorOnChart(elementId, `No data available`);
         return;
     }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
 
-     // Sort data by value (descending) for better readability of top items (optional)
-     const sortedEntries = Object.entries(data).sort(([, a], [, b]) => b - a);
+     const sortedEntries = Object.entries(data).sort(([, a], [, b]) => b - a); // Sort values descending
      const sortedLabels = sortedEntries.map(([key]) => key);
      const sortedValues = sortedEntries.map(([, value]) => value);
 
@@ -475,220 +578,136 @@ function createHorizontalBarChart(elementId, data, label, maxValue) {
         new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: sortedLabels, // Use sorted labels
+                labels: sortedLabels,
                 datasets: [{
                     label: label,
-                    data: sortedValues, // Use sorted values
-                    backgroundColor: '#4ecdc4', // Teal color
-                    borderColor: '#4ecdc4',
+                    data: sortedValues,
+                    backgroundColor: '#17a2b8', // Bootstrap info/cyan
+                    borderColor: '#17a2b8',
                     borderWidth: 1,
-                    borderRadius: 5
+                    borderRadius: { topRight: 5, bottomRight: 5 } // Round end of bars
                 }]
             },
             options: {
-                indexAxis: 'y', // Make it horizontal
+                indexAxis: 'y', // Makes it horizontal
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: false
-                    },
+                    legend: { display: false },
                      tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleFont: { weight: 'bold' },
                         callbacks: {
-                            label: function(context) {
-                                 let value = context.raw;
-                                 if (typeof value !== 'number') return '';
-                                 return `${label}: ${value.toLocaleString()}`; // Add label context
-                            }
+                           label: (context) => `${context.dataset.label}: ${context.raw?.toLocaleString() ?? 'N/A'}`
                         }
                     }
                 },
                 scales: {
                     x: {
                         beginAtZero: true,
-                        max: maxValue, // Optional max
-                        grid: {
-                            color: '#e9ecef'
-                        },
-                         ticks: {
-                             color: '#495057'
-                         }
+                        max: maxValue, // Optional max for consistent scale (e.g., rating)
+                        grid: { color: '#e9ecef', drawBorder: false },
+                        ticks: { color: '#6c757d', precision: 0 } // Integers for counts
                     },
                     y: {
-                         grid: {
-                             display: false
-                         },
-                         ticks: {
-                             color: '#495057'
-                         }
+                        grid: { display: false },
+                        ticks: { color: '#495057' } // Darker labels for better readability
                     }
                 },
-                animation: {
-                    duration: 800,
-                    easing: 'easeOutQuart'
-                }
+                animation: { duration: 700, easing: 'easeOutQuad' }
             }
         });
      } catch (error) {
         console.error(`Chart.js error creating Horizontal Bar Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
+        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
     }
 }
 
 function createPieChart(elementId, data) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-    if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
+    const canvas = document.getElementById(elementId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    clearErrorOnChart(elementId);
+    destroyChartIfExists(elementId);
+
+    if (!data || typeof data !== 'object' || Object.values(data).every(v => v === 0)) {
+        displayErrorOnChart(elementId, `No data available for pie chart`);
         return;
     }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
 
-    // Enhanced color palette
-    const colorPalette = ['#3a86ff', '#ffbe0b', '#fb5607', '#8338ec', '#4ecdc4', '#ff6b6b', '#fca311', '#14213d', '#6a0dad', '#ced4da']; // Added gray fallback
+    const labels = Object.keys(data);
+    const values = Object.values(data);
 
-     // Ensure enough colors for the data, repeat if necessary
-    const backgroundColors = Object.keys(data).map((_, index) => colorPalette[index % colorPalette.length]);
+    const colorPalette = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1', '#fd7e14', '#20c997', '#6c757d']; // Bootstrap-ish
+    const backgroundColors = labels.map((_, index) => colorPalette[index % colorPalette.length]);
 
     try {
         new Chart(ctx, {
             type: 'pie',
             data: {
-                labels: Object.keys(data),
+                labels: labels,
                 datasets: [{
-                    data: Object.values(data),
-                    backgroundColor: backgroundColors, // Use generated colors
-                    borderColor: '#ffffff', // White border for separation
-                    borderWidth: 2
+                    data: values,
+                    backgroundColor: backgroundColors,
+                    borderColor: '#ffffff',
+                    borderWidth: 2,
+                    hoverOffset: 6 // Make slice pop slightly more
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        position: 'right', // Better for limited height
-                        labels: {
-                            boxWidth: 12,
-                            padding: 15 // Spacing for legend items
-                        }
-                    },
-                     tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleFont: { weight: 'bold' },
-                        callbacks: {
+                    legend: { position: 'right', labels: { boxWidth: 15, padding: 20 } },
+                    tooltip: {
+                         callbacks: {
                             label: function(context) {
                                 let label = context.label || '';
                                 let value = context.raw;
-                                if (typeof value !== 'number') return `${label}: N/A`;
-
-                                let total = context.chart.getDatasetMeta(0)?.total; // Safer access
+                                let total = context.chart.getDatasetMeta(0)?.total ?? 1; // Avoid div by zero
                                 let percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
                                 return `${label}: ${value.toLocaleString()} (${percentage})`;
                             }
                         }
                     }
                 },
-                animation: {
-                    duration: 1000, // Longer for pie/doughnut
-                    easing: 'easeOutBounce'
-                }
+                animation: { duration: 900, easing: 'easeOutExpo' }
             }
         });
     } catch (error) {
         console.error(`Chart.js error creating Pie Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
+        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
     }
 }
 
-// createDoughnutChart function - likely not used based on current HTML, but keep if needed
-function createDoughnutChart(elementId, data) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-     if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
-        return;
-    }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
 
-    const colorPalette = ['#ff6b6b', '#4ecdc4', '#ffbe0b', '#3a86ff', '#8338ec', '#fb5607', '#fca311', '#14213d', '#ced4da'];
-    const backgroundColors = Object.keys(data).map((_, index) => colorPalette[index % colorPalette.length]);
+function createDoughnutChart(elementId, data) { /* ... same as pie, just type:'doughnut', add cutout option ... */ }
 
-    try {
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: Object.keys(data),
-                datasets: [{
-                    data: Object.values(data),
-                    backgroundColor: backgroundColors,
-                    borderColor: '#ffffff',
-                    borderWidth: 2,
-                    hoverOffset: 8 // Slightly enlarge slice on hover
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '65%', // Adjust doughnut thickness
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            boxWidth: 12,
-                            padding: 15
-                        }
-                    },
-                    tooltip: {
-                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                         titleFont: { weight: 'bold' },
-                        callbacks: { // Similar percentage calculation as Pie chart
-                            label: function(context) {
-                                let label = context.label || '';
-                                let value = context.raw;
-                                 if (typeof value !== 'number') return `${label}: N/A`;
-                                let total = context.chart.getDatasetMeta(0)?.total;
-                                let percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
-                                return `${label}: ${value.toLocaleString()} (${percentage})`;
-                            }
-                        }
-                    }
-                },
-                 animation: {
-                    duration: 1000,
-                    easing: 'easeOutBounce'
-                }
-            }
-        });
-    } catch (error) {
-        console.error(`Chart.js error creating Doughnut Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
-    }
-}
 
-// Helper function to format rating labels (e.g., "Rating_Teaching" -> "Teaching")
 function formatRatingLabel(key) {
-    return key.replace(/^Rating_/i, '').replace(/_/g, ' '); // Make it more readable
+    return key.replace(/^Rating_/i, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
+
 
 function createRadarChart(elementId, data) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-    if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
-        return;
+     const canvas = document.getElementById(elementId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    clearErrorOnChart(elementId);
+    destroyChartIfExists(elementId);
+
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+         displayErrorOnChart(elementId, 'No data for Radar Chart');
+         return;
     }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
 
-    const labels = Object.keys(data).map(key => formatRatingLabel(key));
-    const values = Object.values(data).map(v => typeof v === 'number' ? v : 0); // Default non-numeric to 0
+    const labels = Object.keys(data).map(formatRatingLabel);
+    const values = Object.values(data).map(v => (typeof v === 'number' && !isNaN(v) ? v : 0));
 
-     if (labels.length === 0 || values.length === 0) {
-         displayErrorOnChart(elementId, 'No valid data for Radar Chart');
+     if (labels.length === 0 || values.every(v => v === 0)) {
+         displayErrorOnChart(elementId, 'No valid data points for Radar Chart');
          return;
      }
+
+    const maxScale = 5; // Assumed rating scale
 
     try {
         new Chart(ctx, {
@@ -696,14 +715,14 @@ function createRadarChart(elementId, data) {
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Average Rating',
+                    label: 'Average Rating', // Used in tooltip
                     data: values,
-                    backgroundColor: 'rgba(58, 134, 255, 0.2)', // Light blue fill
-                    borderColor: 'rgba(58, 134, 255, 0.8)', // Solid blue line
-                    pointBackgroundColor: 'rgba(58, 134, 255, 1)', // Solid blue points
-                    pointBorderColor: '#fff', // White border on points
+                    backgroundColor: 'rgba(23, 162, 184, 0.2)', // Info/Cyan transparent
+                    borderColor: 'rgba(23, 162, 184, 0.8)', // Info/Cyan solid
+                    pointBackgroundColor: 'rgba(23, 162, 184, 1)',
+                    pointBorderColor: '#fff',
                     pointHoverBackgroundColor: '#fff',
-                    pointHoverBorderColor: 'rgba(58, 134, 255, 1)',
+                    pointHoverBorderColor: 'rgba(23, 162, 184, 1)',
                     borderWidth: 2
                 }]
             },
@@ -711,101 +730,71 @@ function createRadarChart(elementId, data) {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    r: { // Radial axis configuration
-                        beginAtZero: true,
-                        min: 0,
-                        max: 5, // Assuming a 5-point rating scale - ADJUST IF NEEDED
-                        ticks: {
-                            stepSize: 1,
-                            backdropColor: 'rgba(0, 0, 0, 0)', // Transparent background behind ticks
-                            color: '#495057'
-                        },
-                        pointLabels: { // Labels like "Teaching", "Clarity"
-                            font: {
-                                size: 13 // Slightly larger point labels
-                            },
-                            color: '#333'
-                        },
-                        grid: {
-                            color: '#ced4da' // Lighter grid lines
-                        },
-                        angleLines: {
-                             color: '#ced4da' // Lines from center to points
-                        }
+                    r: { // Radial axis (values)
+                        beginAtZero: true, min: 0, max: maxScale,
+                        ticks: { stepSize: 1, backdropColor: 'transparent', color: '#6c757d' },
+                        pointLabels: { font: { size: 13 }, color: '#495057' }, // Labels like "Teaching"
+                        grid: { color: '#dee2e6' },
+                        angleLines: { color: '#dee2e6' } // Lines from center
                     }
                 },
-                 plugins: {
+                plugins: {
                     tooltip: {
-                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                         titleFont: { weight: 'bold' },
-                        callbacks: {
-                            label: function(context) {
-                                return `Rating: ${context.raw?.toFixed(2) ?? 'N/A'}`; // Show rating with 2 decimals safely
-                            }
-                        }
+                         callbacks: {
+                              title: (tooltipItems) => tooltipItems[0]?.label ?? 'Category',
+                              label: (context) => `Average: ${context.raw?.toFixed(2) ?? 'N/A'}`
+                         }
                     },
-                    legend: {
-                        display: false // Hide legend if only one dataset
-                    }
+                     legend: { display: false }
                 },
-                 animation: { // Specific animation for radar
-                    duration: 900,
-                    easing: 'easeOutCirc'
-                }
+                animation: { duration: 800, easing: 'easeOutCirc' }
             }
         });
     } catch (error) {
         console.error(`Chart.js error creating Radar Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
+        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
     }
 }
 
+
 function createScatterPlot(elementId, data) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-     if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
+     const canvas = document.getElementById(elementId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    clearErrorOnChart(elementId);
+    destroyChartIfExists(elementId);
+
+    if (!data || !Array.isArray(data.cgpa) || !Array.isArray(data.package) || data.cgpa.length !== data.package.length || data.cgpa.length === 0) {
+        displayErrorOnChart(elementId, "Invalid or empty CGPA/Package data for Scatter Plot");
         return;
     }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
 
-    // Create dataset from CGPA and package arrays, filtering invalid entries
     const scatterData = [];
-    // Add rigorous checks for data type and length
-    if (data && Array.isArray(data.cgpa) && Array.isArray(data.package) && data.cgpa.length === data.package.length) {
-        for (let i = 0; i < data.cgpa.length; i++) {
-            // Ensure both cgpa and package are valid finite numbers
-            const cgpa = parseFloat(data.cgpa[i]);
-            const pkg = parseFloat(data.package[i]);
-            if (Number.isFinite(cgpa) && Number.isFinite(pkg)) {
-                scatterData.push({
-                    x: cgpa,
-                    y: pkg
-                });
-            }
+    for (let i = 0; i < data.cgpa.length; i++) {
+        const cgpa = parseFloat(data.cgpa[i]);
+        const pkg = parseFloat(data.package[i]);
+        if (Number.isFinite(cgpa) && Number.isFinite(pkg)) {
+            scatterData.push({ x: cgpa, y: pkg });
         }
-    } else {
-         console.error("Invalid data format for scatter plot:", data);
-         displayErrorOnChart(elementId, "Invalid/mismatched CGPA/Package data");
-         return;
     }
 
-     if (scatterData.length === 0) {
-         displayErrorOnChart(elementId, "No valid data points for Scatter Plot");
-         return;
-     }
+    if (scatterData.length === 0) {
+        displayErrorOnChart(elementId, "No valid numeric pairs found for Scatter Plot");
+        return;
+    }
 
     try {
         new Chart(ctx, {
             type: 'scatter',
             data: {
                 datasets: [{
-                    label: 'CGPA vs Package',
+                    label: 'Student', // Tooltip context
                     data: scatterData,
-                    backgroundColor: 'rgba(58, 134, 255, 0.6)', // Semi-transparent blue points
-                    borderColor: 'rgba(58, 134, 255, 0.8)',
-                    pointRadius: 5, // Default point size
-                    pointHoverRadius: 7 // Larger points on hover
+                    backgroundColor: 'rgba(13, 110, 253, 0.6)', // Primary transparent
+                    borderColor: 'rgba(13, 110, 253, 0.8)',
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    pointHoverBorderWidth: 2
                 }]
             },
             options: {
@@ -813,194 +802,117 @@ function createScatterPlot(elementId, data) {
                 maintainAspectRatio: false,
                 scales: {
                     x: {
-                        type: 'linear', // Ensure linear scale
-                        position: 'bottom',
-                        title: {
-                            display: true,
-                            text: 'CGPA',
-                            font: { weight: 'bold' },
-                            color: '#333'
-                        },
+                        type: 'linear', position: 'bottom',
+                        title: { display: true, text: 'CGPA', font: { weight: 'bold' }, color: '#495057' },
                         grid: { color: '#e9ecef' },
-                        ticks: { color: '#495057' },
-                        // Let Chart.js determine min/max unless you have specific needs
+                        ticks: { color: '#6c757d', precision: 1 }, // Allow one decimal for CGPA ticks
+                         // suggestedMin: 5, // Adjust based on typical range
+                         // suggestedMax: 10
                     },
                     y: {
-                         type: 'linear',
-                        title: {
-                            display: true,
-                            text: 'Package (LPA)',
-                            font: { weight: 'bold' },
-                            color: '#333'
-                        },
-                        beginAtZero: true, // Packages usually start at 0
+                        type: 'linear',
+                        title: { display: true, text: 'Package (LPA)', font: { weight: 'bold' }, color: '#495057' },
+                        beginAtZero: true,
                         grid: { color: '#e9ecef' },
                         ticks: {
-                            color: '#495057',
-                            callback: function(value) { return `₹${value.toLocaleString()} LPA`; } // Add currency/unit
-                         }
+                            color: '#6c757d',
+                            callback: (value) => `₹${value.toLocaleString()}L`
+                        }
                     }
                 },
                 plugins: {
-                     legend: {
-                        display: false // Usually not needed for single dataset scatter
-                     },
+                    legend: { display: false },
                     tooltip: {
-                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                         titleFont: { weight: 'bold' },
                         callbacks: {
                             label: function(context) {
-                                // Check if parsed values exist before formatting
                                 const xVal = context.parsed?.x;
                                 const yVal = context.parsed?.y;
                                 if (typeof xVal === 'number' && typeof yVal === 'number') {
-                                    return `CGPA: ${xVal.toFixed(2)}, Package: ₹${yVal.toFixed(2)} LPA`;
+                                    return `CGPA: ${xVal.toFixed(2)}, Package: ₹${yVal.toFixed(1)} LPA`; // Show 1 decimal for package
                                 }
-                                return 'Invalid data point';
+                                return 'Data point';
                             }
                         }
                     }
                 }
-                // No specific animation usually needed for scatter, default fade is fine
+                // No specific animation needed usually
             }
         });
      } catch (error) {
         console.error(`Chart.js error creating Scatter Plot (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
+        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
     }
 }
 
-function createMarksComparisonChart(elementId, data) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-     if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
-        return;
-    }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
 
-    // Validate data structure and types
-    if (!data || typeof data.Internal !== 'number' || typeof data.External !== 'number') {
-         // Python now sends null if keys were missing, so we handle that case specifically
-         if (data && data.Internal === null && data.External === null) {
-             displayErrorOnChart(elementId, "Internal/External exam type data not found");
-         } else {
-            console.error("Invalid data for Marks Comparison chart:", data);
-            displayErrorOnChart(elementId, "Invalid marks comparison data received");
-         }
-         return;
+function createMarksComparisonChart(elementId, data) {
+     const canvas = document.getElementById(elementId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    clearErrorOnChart(elementId);
+    destroyChartIfExists(elementId);
+
+    const datasets = [];
+    if (data && typeof data.Internal === 'number' && !isNaN(data.Internal)) {
+        datasets.push({ label: 'Internal', data: [data.Internal], backgroundColor: '#17a2b8', borderRadius: 5 }); // Cyan
+    }
+    if (data && typeof data.External === 'number' && !isNaN(data.External)) {
+        datasets.push({ label: 'External', data: [data.External], backgroundColor: '#fd7e14', borderRadius: 5 }); // Orange
+    }
+
+    if (datasets.length === 0) {
+       displayErrorOnChart(elementId, 'No valid Internal/External mark data found');
+       return;
     }
 
     try {
         new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: ['Average Marks'], // Single category label
-                datasets: [
-                    {
-                        label: 'Internal Marks',
-                        data: [data.Internal], // Expecting a number
-                        backgroundColor: '#4ecdc4', // Teal
-                        borderColor: '#4ecdc4',
-                        borderWidth: 1,
-                        borderRadius: 5
-                    },
-                    {
-                        label: 'External Marks',
-                        data: [data.External], // Expecting a number
-                        backgroundColor: '#ff6b6b', // Coral
-                        borderColor: '#ff6b6b',
-                        borderWidth: 1,
-                        borderRadius: 5
-                    }
-                ]
+                labels: ['Average Marks'], // Single category
+                datasets: datasets
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top', // Show legend clearly
-                    },
-                     tooltip: {
-                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                         titleFont: { weight: 'bold' },
-                         callbacks: {
-                             title: () => null, // No title needed for single category
-                             label: function(context) {
-                                  let rawValue = context.raw;
-                                  if (typeof rawValue === 'number') {
-                                       return `${context.dataset.label}: ${rawValue.toFixed(2)}`;
-                                  }
-                                  return `${context.dataset.label}: N/A`;
-                             }
-                         }
-                     }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Average Marks',
-                            font: { weight: 'bold' },
-                            color: '#333'
-                        },
-                         grid: { color: '#e9ecef' },
-                         ticks: { color: '#495057' }
-                    },
-                     x: {
-                         grid: { display: false },
-                         ticks: { display: false } // Hide x-axis labels if only one category
-                     }
-                },
-                animation: {
-                    duration: 800,
-                    easing: 'easeOutQuart'
-                }
+                 plugins: { legend: { position: 'top' } },
+                 scales: {
+                     y: { beginAtZero: true, title: { display: false }, max: 100 }, // Scale 0-100
+                     x: { grid: { display: false }, ticks: { display: false } }
+                 },
+                  tooltip: {
+                       callbacks: {
+                           title: () => '', // Hide title
+                           label: (context) => `${context.dataset.label}: ${context.raw?.toFixed(1) ?? 'N/A'}`
+                       }
+                   },
+                animation: { duration: 700, easing: 'easeOutQuad' }
             }
         });
      } catch (error) {
         console.error(`Chart.js error creating Marks Comparison Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
+        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
     }
 }
 
 function createTrendChart(elementId, data, label) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-     if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
-        return;
-    }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
+     const canvas = document.getElementById(elementId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    clearErrorOnChart(elementId);
+    destroyChartIfExists(elementId);
 
-    // Ensure data is an object and not empty
-    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-        displayErrorOnChart(elementId, `No data available for ${label} trend`);
+    if (!data || typeof data !== 'object' || Object.keys(data).length < 2) { // Need at least 2 points for a trend
+        displayErrorOnChart(elementId, `Insufficient data for ${label} trend (requires >= 2 points)`);
         return;
     }
 
+    const sortedKeys = Object.keys(data).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+    const labels = sortedKeys;
+    const values = sortedKeys.map(key => Number.isFinite(parseFloat(data[key])) ? parseFloat(data[key]) : null);
 
-    // Attempt to sort keys chronologically (works for simple numbers/strings)
-    const sortedKeys = Object.keys(data).sort((a, b) => {
-         // Improved sort: Treat as numbers if possible, otherwise string compare
-         const numA = parseFloat(a);
-         const numB = parseFloat(b);
-         if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-         return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
-    });
-    const sortedLabels = sortedKeys;
-    // Ensure values are numbers, default to null/0 if not? Chart.js can handle gaps with 'spanGaps'
-    const sortedData = sortedKeys.map(key => {
-        const val = parseFloat(data[key]);
-        return Number.isFinite(val) ? val : null; // Use null for gaps
-    });
-
-    // Filter out purely null data points to avoid empty chart errors
-    const validDataPoints = sortedData.filter(d => d !== null);
-     if (validDataPoints.length === 0) {
-         displayErrorOnChart(elementId, `No valid numeric data for ${label} trend`);
+    if (values.filter(v => v !== null).length < 2) {
+         displayErrorOnChart(elementId, `Not enough valid numeric data points for ${label} trend`);
          return;
      }
 
@@ -1008,375 +920,153 @@ function createTrendChart(elementId, data, label) {
         new Chart(ctx, {
             type: 'line',
             data: {
-                labels: sortedLabels,
+                labels: labels,
                 datasets: [{
                     label: label,
-                    data: sortedData, // Data with potential nulls for gaps
-                    spanGaps: true, // Connect line across null points
-                    backgroundColor: 'rgba(58, 134, 255, 0.1)', // Light fill under line
-                    borderColor: 'rgba(58, 134, 255, 1)', // Solid line color
-                    borderWidth: 2,
-                    pointBackgroundColor: 'rgba(58, 134, 255, 1)', // Point color
-                    pointRadius: 4, // Visible points
+                    data: values,
+                    borderColor: '#0d6efd', // Primary blue
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)', // Light blue fill
+                    fill: true, // Add fill below line
+                    borderWidth: 2.5,
+                    pointRadius: 4,
                     pointHoverRadius: 6,
-                    tension: 0.1 // Slight curve to the line
+                    pointBackgroundColor: '#0d6efd',
+                    tension: 0.1, // Slight curve
+                    spanGaps: true // Connect over null points
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                  plugins: {
-                    legend: {
-                        display: !!label && label.length > 0 // Display legend only if label provided
-                    },
+                    legend: { display: false }, // Often cleaner without if title is clear
                      tooltip: {
-                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                         titleFont: { weight: 'bold' },
-                         intersect: false, // Show tooltip when hovering near line
-                         mode: 'index', // Show tooltips for all points at that index
+                         intersect: false, mode: 'index',
                          callbacks: {
-                             label: function(context) {
-                                  let val = context.raw;
-                                  return `${label}: ${typeof val === 'number' ? val.toFixed(2) : 'N/A'}`;
-                             }
+                             label: (context) => `${label}: ${context.raw?.toFixed(2) ?? 'N/A'}`
                          }
                      }
                 },
                 scales: {
                     y: {
-                        beginAtZero: false, // Trend might not start at zero
-                         grid: { color: '#e9ecef' },
-                         ticks: { color: '#495057' }
+                        beginAtZero: false, // Start axis near data range
+                        grid: { color: '#e9ecef' }, ticks: { color: '#6c757d' }
+                        // Consider suggested min/max if applicable (e.g., ratings)
                     },
                     x: {
-                         grid: { display: false },
-                         ticks: { color: '#495057' }
+                        grid: { display: false }, ticks: { color: '#6c757d' }
                     }
                 },
-                 animation: {
-                    duration: 900,
-                    easing: 'easeOutCubic'
-                }
+                animation: { duration: 800, easing: 'easeOutCubic' }
             }
         });
      } catch (error) {
         console.error(`Chart.js error creating Trend Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
+        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
     }
 }
 
+
 function createStackedBarChart(elementId, data) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-    if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
-        return;
-    }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
+     const canvas = document.getElementById(elementId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    clearErrorOnChart(elementId);
+    destroyChartIfExists(elementId);
 
-    // Ensure data is an object and not empty
-     if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-        displayErrorOnChart(elementId, 'No data available for Stacked Bar Chart');
+    if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+        displayErrorOnChart(elementId, 'No data for Stacked Bar Chart');
         return;
     }
 
-    // Extract gender categories dynamically
-    const categories = Object.keys(data); // E.g., ['Male', 'Female', 'Other']
-
-    // Define dataset labels and corresponding keys in the nested data
-    const datasetConfig = [
-         { label: 'Placed', key: '1', color: '#4ecdc4', radius: { topLeft: 5, topRight: 5 } }, // Teal
-         { label: 'Not Placed', key: '0', color: '#ff6b6b', radius: { bottomLeft: 5, bottomRight: 5 } } // Coral
+    const categories = Object.keys(data).sort(); // Sort categories alpha
+    const datasetConfig = [ // Order: Placed on top
+        { label: 'Placed', key: '1', color: '#198754', radius: { topLeft: 5, topRight: 5 } }, // Green
+        { label: 'Not Placed', key: '0', color: '#dc3545', radius: { bottomLeft: 5, bottomRight: 5 } } // Red
     ];
-
-
-    // Create datasets, handling potential missing keys ('0' or '1') gracefully
     const datasets = datasetConfig.map(config => ({
         label: config.label,
-        // Map data ensuring 0 if the key (e.g., '1') is missing for a category (e.g., 'Male')
-        data: categories.map(category => data[category]?.[config.key] || 0),
+        data: categories.map(category => parseInt(data[category]?.[config.key] || 0)),
         backgroundColor: config.color,
-        borderColor: config.color,
-        borderWidth: 1,
         borderRadius: config.radius
     }));
+
+    if (datasets.every(ds => ds.data.every(val => val === 0))) {
+          displayErrorOnChart(elementId, 'All counts are zero');
+          return;
+     }
 
     try {
         new Chart(ctx, {
             type: 'bar',
-            data: {
-                labels: categories, // Gender labels
-                datasets: datasets
-            },
+            data: { labels: categories, datasets: datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                 plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                     tooltip: {
-                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                         titleFont: { weight: 'bold' },
-                         mode: 'index', // Show both tooltips for the category
-                          callbacks: {
-                             label: function(context) {
-                                 let val = context.raw;
-                                  return `${context.dataset.label}: ${typeof val === 'number' ? val.toLocaleString() : 'N/A'}`;
-                             }
-                         }
-                     }
-                },
+                 plugins: { legend: { position: 'top' } },
                 scales: {
-                    x: {
-                        stacked: true, // Stack bars horizontally (along category axis)
-                        grid: { display: false },
-                        ticks: { color: '#495057' }
-                    },
+                    x: { stacked: true, grid: { display: false }, ticks: { color: '#6c757d' } },
                     y: {
-                        stacked: true, // Stack bars vertically (along value axis)
-                        beginAtZero: true,
-                        title: {
-                           display: true,
-                           text: 'Number of Students',
-                           font: { weight: 'normal', size: 12 },
-                           color: '#666',
-                           padding: {top: 0, bottom: 10}
-                        },
-                        grid: { color: '#e9ecef' },
-                        ticks: { color: '#495057' }
+                        stacked: true, beginAtZero: true,
+                        title: { display: true, text: 'Number of Students', color: '#6c757d', font:{size:11} },
+                        grid: { color: '#e9ecef', drawBorder: false },
+                        ticks: { color: '#6c757d', precision: 0 }
                     }
                 },
-                 animation: {
-                    duration: 800,
-                    easing: 'easeOutQuart'
-                }
+                 tooltip: {
+                     mode: 'index', // Show both values on hover
+                      callbacks: {
+                         label: (context) => `${context.dataset.label}: ${context.raw?.toLocaleString() ?? 'N/A'}`
+                     }
+                 },
+                animation: { duration: 700, easing: 'easeOutQuad' }
             }
         });
      } catch (error) {
         console.error(`Chart.js error creating Stacked Bar Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
-    }
-}
-
-function createMultiLineChart(elementId, data) {
-    const ctx = document.getElementById(elementId)?.getContext('2d');
-    if (!ctx) {
-        console.error(`Canvas context not found for ID: ${elementId}`);
-        return;
-    }
-    let chartInstance = Chart.getChart(elementId);
-    if (chartInstance) chartInstance.destroy();
-
-     // Ensure data is an object and not empty
-     if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
-        displayErrorOnChart(elementId, 'No yearly trend data available');
-        return;
-    }
-
-    // Extract years and sort numerically
-    const years = Object.keys(data).sort((a, b) => parseFloat(a) - parseFloat(b));
-    if (years.length === 0) {
-         displayErrorOnChart(elementId, 'No years found in trend data');
-         return;
-    }
-
-    // Get categories dynamically from the first year's data, assuming structure is consistent
-    // Need to handle case where first year might have no data
-    let categories = [];
-    for (const year of years) {
-        if (data[year] && typeof data[year] === 'object' && Object.keys(data[year]).length > 0) {
-            categories = Object.keys(data[year]);
-            break; // Found categories from the first valid year
-        }
-    }
-
-    if (categories.length === 0) {
-         displayErrorOnChart(elementId, 'No rating categories found in yearly trend data');
-         return;
-    }
-
-    // Define a color palette for different rating types
-     const colorPalette = {
-        'Rating_Teaching':    { border: '#3a86ff', background: 'rgba(58, 134, 255, 0.1)' }, // Blue
-        'Rating_Engagement':  { border: '#ffbe0b', background: 'rgba(255, 190, 11, 0.1)' }, // Yellow
-        'Rating_Clarity':     { border: '#4ecdc4', background: 'rgba(78, 205, 196, 0.1)' }, // Teal
-        'Rating_Punctuality': { border: '#ff6b6b', background: 'rgba(255, 107, 107, 0.1)' }, // Coral
-        'Rating_Default':     { border: '#8338ec', background: 'rgba(131, 56, 236, 0.1)'}, // Purple fallback
-        'default':            { border: '#adb5bd', background: 'rgba(173, 181, 189, 0.1)'}  // Gray fallback
-    };
-
-    // Create datasets for each rating category
-    const datasets = categories.map((category, index) => {
-        // Get value for each year, defaulting to null for gaps if year/category missing
-        const values = years.map(year => {
-             const val = data[year]?.[category];
-             // Ensure value is numeric or null
-             return (typeof val === 'number' && Number.isFinite(val)) ? val : null;
-        });
-
-        const cleanCategoryKey = category.replace(/ /g, '_'); // Ensure consistent key for palette lookup
-        const colors = colorPalette[cleanCategoryKey] || colorPalette['Rating_Default'] || colorPalette['default']; // Palette lookup strategy
-        return {
-            label: formatRatingLabel(category), // Use helper to clean label for display
-            data: values,
-            borderColor: colors.border,
-            backgroundColor: colors.background,
-            borderWidth: 2,
-            fill: false, // Keep fill subtle or off for multi-line clarity
-            tension: 0.1, // Slight curve
-             pointRadius: 3,
-             pointHoverRadius: 5,
-             pointBackgroundColor: colors.border,
-             spanGaps: true // Connect line over null data points
-        };
-    });
-
-     // Check if all datasets have only null values
-     const allDataIsNull = datasets.every(ds => ds.data.every(d => d === null));
-     if (allDataIsNull) {
-         displayErrorOnChart(elementId, 'No valid numeric rating data found for trends');
-         return;
-     }
-
-
-    try {
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: years,
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top', // Show legend for multiple lines
-                        labels: {
-                            usePointStyle: true, // Use point style in legend
-                            boxWidth: 8,
-                            padding: 15
-                        }
-                    },
-                     tooltip: {
-                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                         titleFont: { weight: 'bold' },
-                         intersect: false,
-                         mode: 'index', // Show all tooltips for the year
-                         callbacks: {
-                             // Title callback can show the year
-                             title: function(tooltipItems) {
-                                 return `Year: ${tooltipItems[0]?.label || ''}`;
-                             },
-                             label: function(context) {
-                                 let label = context.dataset.label || '';
-                                 let value = context.raw;
-                                  return `${label}: ${typeof value === 'number' ? value.toFixed(2) : 'N/A'}`; // Handle null/undefined
-                             }
-                         }
-                     }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: false, // Ratings likely don't start at 0
-                        min: 0, // Set min if appropriate (e.g., rating scales, typically 1 or 0)
-                        max: 5, // Set max if appropriate (e.g., rating scale 5)
-                        title: {
-                            display: true,
-                            text: 'Average Rating', // Generic Y-axis title
-                            font: { weight: 'bold' },
-                            color: '#333'
-                        },
-                        grid: { color: '#e9ecef' },
-                        ticks: {
-                            color: '#495057',
-                            stepSize: 1 // Adjust step size if needed for rating scale
-                        }
-                    },
-                    x: {
-                         title: {
-                            display: true,
-                            text: 'Year',
-                            font: { weight: 'bold' },
-                            color: '#333'
-                        },
-                        grid: { display: false },
-                        ticks: { color: '#495057' }
-                    }
-                },
-                 interaction: { // Improve hover interaction
-                    mode: 'index',
-                    intersect: false,
-                },
-                animation: {
-                    duration: 900,
-                    easing: 'easeOutCubic'
-                }
-            }
-        });
-    } catch (error) {
-        console.error(`Chart.js error creating Multi-Line Chart (${elementId}):`, error);
-        displayErrorOnChart(elementId, `Chart creation failed: ${error.message}`);
+        displayErrorOnChart(elementId, `Chart rendering failed: ${error.message}`);
     }
 }
 
 
 // --- Main Execution ---
-
-// Initialize charts when the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', async () => {
-    // Fetch data first
-    const dashboardData = await fetchDashboardData();
-
-    // Setup tab navigation regardless of data fetching success
+    showLoading(); // Show loader right away
     setupTabNavigation();
 
-    // If data fetching failed, `dashboardData` will be null, and a global error message was shown
+    const dashboardData = await fetchDashboardData(); // Fetch data (handles loader hide/error)
+
     if (!dashboardData) {
-        console.error("Dashboard data could not be loaded. Chart initialization skipped.");
-        // Optionally explicitly display errors on all charts using displayErrorOnChart for each tab
-        // This might be redundant if the global message is clear enough. Example:
-         displayErrorOnChart('gradeChart', 'Failed to load data');
-         displayErrorOnChart('placementRateChart', 'Failed to load data');
-         displayErrorOnChart('ratingsChart', 'Failed to load data');
-         // ... add more for key charts on each tab if desired
-        return; // Stop further execution
+        console.error("Dashboard data fetch failed. Cannot initialize dashboard.");
+        // Global error is shown by fetch function. Optionally add chart-specific fallbacks:
+        // displayErrorOnChart('gradeChart', 'Failed to load data');
+        // displayErrorOnChart('placementRateChart', 'Failed to load data'); // etc.
+        return;
     }
 
-    // Clear any global error message if data was loaded successfully
-    const globalError = document.querySelector('.global-error');
-    if (globalError) {
-        globalError.remove();
-    }
+     clearGlobalErrorMessage(); // Clear if fetch was successful
 
-    // Initialize charts for each section using the fetched data
-    // Add checks to ensure data sub-objects exist before calling initialization
-     if (dashboardData.exam_data) {
+    // Initialize each section, checking for the data key first
+    if (dashboardData.exam_data) {
         initializeExamCharts(dashboardData.exam_data);
-     } else {
-         console.warn("Exam data object missing in fetched data. Skipping exam charts.");
-         // Display errors on exam charts if needed
-         displayErrorOnChart('gradeChart', 'Exam data missing');
-         // ...
-     }
+    } else {
+        console.warn("Exam data missing from response. Initializing with error state.");
+        initializeExamCharts({ error: 'Exam data not found in response' });
+    }
 
     if (dashboardData.placement_data) {
         initializePlacementCharts(dashboardData.placement_data);
     } else {
-         console.warn("Placement data object missing in fetched data. Skipping placement charts.");
-         // Display errors on placement charts if needed
-         displayErrorOnChart('placementRateChart', 'Placement data missing');
-         // ...
+         console.warn("Placement data missing from response. Initializing with error state.");
+        initializePlacementCharts({ error: 'Placement data not found in response' });
     }
 
      if (dashboardData.faculty_data) {
         initializeFacultyCharts(dashboardData.faculty_data);
      } else {
-        console.warn("Faculty data object missing in fetched data. Skipping faculty charts.");
-         // Display errors on faculty charts if needed
-         displayErrorOnChart('ratingsChart', 'Faculty data missing');
-          // ...
+        console.warn("Faculty data missing from response. Initializing with error state.");
+        initializeFacultyCharts({ error: 'Faculty data not found in response' });
      }
 
+    console.log("Dashboard initialized.");
 });

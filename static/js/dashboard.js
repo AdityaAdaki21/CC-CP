@@ -246,11 +246,10 @@ function initializeFacultyCharts(facultyData) {
     if (!facultyData || facultyData.error) {
         const errorMsg = facultyData?.error || "Faculty data unavailable";
         console.error("Faculty data error:", errorMsg);
-        // Display error on all relevant charts
         displayErrorOnChart('ratingsChart', errorMsg);
         displayErrorOnChart('deptRatingsChart', errorMsg);
         displayErrorOnChart('facultySemesterChart', errorMsg);
-        displayErrorOnChart('ratingTrendsChart', errorMsg);
+        displayErrorOnChart('ratingTrendsChart', errorMsg); // Keep error display target
         displayErrorOnChart('topFacultyChart', errorMsg);
         displayErrorOnChart('courseRatingChart', errorMsg);
         return; // Stop initialization
@@ -258,7 +257,7 @@ function initializeFacultyCharts(facultyData) {
 
     // Average Ratings by Category (Radar Chart)
     if (facultyData.avg_ratings && Object.keys(facultyData.avg_ratings).length > 0) {
-        createRadarChart('ratingsChart', facultyData.avg_ratings); // Use the correct key: avg_ratings
+        createRadarChart('ratingsChart', facultyData.avg_ratings);
     } else {
         displayErrorOnChart('ratingsChart', 'No Average Faculty Rating data');
     }
@@ -270,25 +269,23 @@ function initializeFacultyCharts(facultyData) {
         displayErrorOnChart('deptRatingsChart', 'No Dept Teaching Rating data');
     }
 
-    // Semester Comparison (Teaching Rating Trend)
+    // Semester Comparison (Rating Trend) - Assuming 'semester_ratings' is overall avg per semester
     if (facultyData.semester_ratings && Object.keys(facultyData.semester_ratings).length > 0) {
-         createTrendChart('facultySemesterChart', facultyData.semester_ratings, 'Average Rating');
+         createTrendChart('facultySemesterChart', facultyData.semester_ratings, 'Average Rating'); // Use simple trend
     } else {
          displayErrorOnChart('facultySemesterChart', 'No Semester Rating data');
     }
 
-    // Faculty Rating Trends (Year-wise Multi-Line)
-    if (facultyData.year_ratings && Object.keys(facultyData.year_ratings).length > 0) {
-        // Ensure there's actually data within the years (check nested structure)
-        const hasTrendData = Object.values(facultyData.year_ratings).some(yearData => typeof yearData === 'object' && Object.keys(yearData).length > 0);
-        if (hasTrendData) {
-             createMultiLineChart('ratingTrendsChart', facultyData.year_ratings);
-        } else {
-            displayErrorOnChart('ratingTrendsChart', 'No yearly rating trend data points found');
-        }
+    // *** MODIFICATION START ***
+    // Faculty Rating Trends (Yearly) - Use createTrendChart with the new data key
+    if (facultyData.yearly_average_trend && Object.keys(facultyData.yearly_average_trend).length > 0) {
+        // Use the existing createTrendChart function
+        createTrendChart('ratingTrendsChart', facultyData.yearly_average_trend, 'Overall Average Rating');
     } else {
-        displayErrorOnChart('ratingTrendsChart', 'No yearly rating trend data available');
+        displayErrorOnChart('ratingTrendsChart', 'No Yearly Average Rating Trend data available');
     }
+    // *** MODIFICATION END ***
+
 
     // Top Rated Faculty
     if (facultyData.top_faculty && Object.keys(facultyData.top_faculty).length > 0) {

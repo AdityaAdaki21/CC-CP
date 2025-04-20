@@ -1046,6 +1046,9 @@ def ask_ai():
 
 # --- Main Execution ---
 if __name__ == '__main__':
-    # Set debug=False for production deployment
-    # Use threaded=True for potentially better handling of concurrent requests including API calls
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    # Port is set by Railway environment variable
+    port = int(os.environ.get('PORT', 5000)) # Default to 5000 for local testing
+    # Set debug=False for production on Railway
+    # Gunicorn handles threading/workers, so threaded=True isn't needed here
+    # The host MUST be '0.0.0.0' to be reachable externally
+    app.run(host='0.0.0.0', port=port, debug=False)

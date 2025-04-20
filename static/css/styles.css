@@ -12,7 +12,7 @@ body {
     line-height: 1.6;
 }
 
-/* --- Loading Indicator Styles --- */
+/* --- Loading Indicator Styles (Keep as is) --- */
 .loading-overlay {
     position: fixed;
     inset: 0;
@@ -54,7 +54,7 @@ body {
     100% { transform: rotate(360deg); }
 }
 
-/* --- Dashboard & Header --- */
+/* --- Dashboard & Header (Keep as is) --- */
 .dashboard {
     display: flex;
     flex-direction: column;
@@ -76,7 +76,7 @@ body {
     position: relative;
 }
 
-/* Global Error Message Styling */
+/* Global Error Message Styling (Keep as is) */
 .global-error {
     background-color: #dc3545; /* Bootstrap danger red */
     color: white;
@@ -105,7 +105,7 @@ body {
     margin-right: auto;
 }
 
-/* --- Tab Navigation --- */
+/* --- Tab Navigation (Keep as is) --- */
 .tab-navigation {
     margin-top: 1.5rem;
     display: flex;
@@ -161,64 +161,63 @@ body {
     color: #343a40;
     font-weight: 600;
 }
+.section-subtitle { /* Optional: For subtitles below section titles */
+    font-size: 0.95rem;
+    color: #6c757d;
+    margin-bottom: 1.5rem; /* Space before content */
+}
 
-/* --- AI Summary Styles --- */
+/* --- AI Summary Styles (Keep as is) --- */
 .summary-container {
-    /* Use a subtle background matching cards or a very light grey */
     background-color: #ffffff;
-    border: 1px solid #e9ecef; /* Add a light border like other cards */
-    border-left: 4px solid #007bff; /* Keep a colored left accent border */
-    margin-bottom: 2.5rem; /* Consistent bottom margin */
-    padding: 1.5rem; /* Increase padding */
-    border-radius: 12px; /* Match card radius */
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05); /* Lighter shadow */
+    border: 1px solid #e9ecef;
+    border-left: 4px solid #007bff;
+    margin-bottom: 2.5rem;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+}
+.summary-container.card:hover { /* Prevent hover effect */
+    transform: none;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
 }
 
 .summary-container h4 {
-    margin-bottom: 1rem; /* More space below title */
-    color: #495057; /* Slightly darker title color */
-    font-size: 1.1rem; /* Slightly smaller than card titles */
+    margin-bottom: 1rem;
+    color: #495057;
+    font-size: 1.1rem;
     font-weight: 600;
-    border-bottom: 1px solid #dee2e6; /* Standard separator */
+    border-bottom: 1px solid #dee2e6;
     padding-bottom: 0.75rem;
 }
 
 .ai-summary-text {
-    color: #343a40; /* Standard text color */
+    color: #343a40;
     font-size: 0.95rem;
-    line-height: 1.7; /* Increase line height for readability */
-    white-space: pre-wrap; /* CRITICAL: Respect newlines/spaces from Gemini */
-    display: none; /* Hide initially, shown by JS */
-    margin-top: 0.5rem; /* Space between title and text */
-}
-/* Style bullet points if Gemini consistently uses them */
-.ai-summary-text::marker { /* Requires Gemini to output actual list items */
-    /* color: #007bff; */ /* Optional: color bullets */
+    line-height: 1.7;
+    white-space: pre-wrap;
+    display: none;
+    margin-top: 0.5rem;
 }
 .ai-summary-text ul, .ai-summary-text ol {
-    padding-left: 20px; /* Indent lists */
-    margin-top: 0.5em;
+    padding-left: 20px; margin-top: 0.5em;
 }
- .ai-summary-text li {
-    margin-bottom: 0.5em; /* Space between list items */
-}
-
+ .ai-summary-text li { margin-bottom: 0.5em; }
 
 .ai-summary-error {
-    color: #dc3545; /* Bootstrap danger red for errors */
+    color: #dc3545;
     font-size: 0.9rem;
-    font-weight: 500; /* Make error slightly bolder */
+    font-weight: 500;
     margin-top: 0.5rem;
-    display: none; /* Hidden by default, shown by JS */
+    display: none;
 }
 
-/* --- KPI Row Styles --- */
+/* --- KPI Row Styles (Keep as is) --- */
 .kpi-row {
     display: grid;
-    /* Adjust number of columns based on viewport */
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.5rem;
-    margin-bottom: 2.5rem; /* More space after KPIs */
+    margin-bottom: 2.5rem;
 }
 
 .kpi-card {
@@ -234,199 +233,216 @@ body {
     transform: translateY(-3px);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
-
-.kpi-card h4 {
-    margin-bottom: 0.6rem;
-    color: #6c757d; /* Medium gray */
-    font-size: 0.9rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
+.kpi-card h4 { margin-bottom: 0.6rem; color: #6c757d; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
+.kpi-card p { font-size: 2rem; color: #343a40; font-weight: 700; line-height: 1.2; }
+.kpi-row .kpi-card:nth-child(2) { border-left-color: #28a745; }
+.kpi-row .kpi-card:nth-child(3) { border-left-color: #ffc107; }
+.kpi-row .kpi-card:nth-child(4) { border-left-color: #fd7e14; }
+/* Add this near the other .kpi-card styles */
+.kpi-card small.kpi-note {
+    display: block;
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 0.5rem; /* Space above the note */
 }
 
-.kpi-card p {
-    font-size: 2rem;
-    color: #343a40;
-    font-weight: 700;
-    line-height: 1.2; /* Adjust line height */
-}
-
-/* Give different KPIs slightly different accent colors */
-.kpi-row .kpi-card:nth-child(2) { border-left-color: #28a745; } /* Green */
-.kpi-row .kpi-card:nth-child(3) { border-left-color: #ffc107; } /* Yellow */
-.kpi-row .kpi-card:nth-child(4) { border-left-color: #fd7e14; } /* Orange */
-
-
-/* --- Card and Chart Layout --- */
-.summary-cards {
-    display: grid;
-    /* Allow cards to determine size, fit as many as possible */
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); /* Increase min width */
-    gap: 1.8rem; /* Slightly more gap */
-    margin-bottom: 2.5rem; /* More space after cards */
-}
-
-.chart-row {
-    display: grid;
-    /* Default to two columns, stack earlier */
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr));
-    gap: 1.8rem;
-    margin-bottom: 2.5rem;
-}
+/* --- Card and Chart Layout (Keep general card styles as is) --- */
+.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.8rem; margin-bottom: 2.5rem; }
+.chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr)); gap: 1.8rem; margin-bottom: 2.5rem; }
 
 .card {
     background-color: white;
-    border-radius: 12px; /* Smoother corners */
-    /* padding: 1.8rem; */ /* Padding handled by summary-container or chart padding */
+    border-radius: 12px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
     transition: transform 0.25s ease, box-shadow 0.25s ease;
     display: flex;
     flex-direction: column;
-    overflow: hidden; /* Prevent content overflow */
-    /* Apply padding directly to children if needed, or ensure containers fill space */
+    overflow: hidden;
 }
-.card > *:not(.summary-container):not(.chart-container) {
-    padding: 0 1.8rem; /* Add padding to non-summary/chart elements like titles/kpis */
+/* Add padding to direct children except chart/summary containers */
+.card > *:not(.chart-container):not(.summary-container) {
+    padding: 1.8rem;
+    padding-bottom: 0; /* Remove bottom padding unless it's the last element */
 }
- .card > .kpi-row, .card > h3 {
-     padding: 1.8rem 1.8rem 0 1.8rem; /* Adjust padding for specific elements if needed */
- }
- .card > h3 {
-     padding-bottom: 0.6rem;
-     margin-bottom: 1.2rem; /* Reset margin from default */
- }
- .card > .chart-container {
-     padding: 1.8rem; /* Add padding around the chart canvas */
-     padding-top: 0; /* No top padding if title is above */
- }
-
- 
-.card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+.card > *:last-child {
+    padding-bottom: 1.8rem; /* Add back bottom padding for the last element */
 }
-
-/* Don't apply hover effect to summary container */
-.summary-container.card:hover {
-    transform: none;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05); /* Keep original shadow */
+.card > h3 { /* Title specific padding/margin */
+    padding: 1.8rem 1.8rem 0.6rem 1.8rem; /* Adjust title padding */
+    margin-bottom: 1.2rem; /* Space below title */
 }
-
-.wide-card {
-    grid-column: 1 / -1;
+.card > .chart-container {
+    padding: 1.8rem; /* Padding around the chart */
+    padding-top: 0; /* Remove top padding as title provides space */
 }
+.card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); }
+.wide-card { grid-column: 1 / -1; }
 
 .card h3 {
-    margin-bottom: 1.2rem;
+    margin-bottom: 1.2rem; /* Reset default h3 margin if needed */
     color: #343a40;
-    font-size: 1.25rem; /* Slightly larger title */
+    font-size: 1.25rem;
     font-weight: 600;
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    border-bottom: 1px solid #eee; /* subtle separator */
+    border-bottom: 1px solid #eee;
     padding-bottom: 0.6rem;
 }
+.card h3 .comparison-note { font-size: 0.8rem; font-weight: normal; color: #6c757d; margin-left: 10px; white-space: nowrap; display: none; }
 
-.card h3 .comparison-note {
-    font-size: 0.8rem;
-    font-weight: normal;
-    color: #6c757d;
-    margin-left: 10px;
-    white-space: nowrap; /* Prevent wrap */
-    display: none; /* Hide initially, shown by JS */
-}
+.chart-container { position: relative; height: 300px; width: 100%; margin-top: 1rem; flex-grow: 1; }
+.summary-cards .chart-container { height: 280px; }
+.chart-container.large-chart { height: 400px; }
 
-.chart-container {
-    position: relative;
-    /* Adjusted default heights */
-    height: 300px; /* Default */
-    width: 100%;
-    margin-top: 1rem;
-    flex-grow: 1; /* Allows container to fill space */
-}
-
-/* Specific styling for chart error messages inside container */
+/* Chart Error Message Styling */
 .chart-error-message {
-    position: absolute;
-    inset: 0;
+    position: absolute; inset: 0; display: none; /* Controlled by JS */
+    justify-content: center; align-items: center; padding: 15px;
+    color: #dc3545; background-color: rgba(255, 255, 255, 0.9);
+    text-align: center; font-size: 13px; font-weight: 500; z-index: 10;
+    border-radius: inherit; /* Match card radius */
+}
+
+/* Optional Placeholder Card Style */
+.placeholder-card {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 15px;
-    color: #dc3545; /* Danger color */
-    background-color: rgba(255, 255, 255, 0.9); /* slight bg */
     text-align: center;
-    font-size: 13px;
+    color: #adb5bd; /* Lighter gray */
+    border: 2px dashed #dee2e6; /* Dashed border */
+    background-color: #f8f9fa; /* Very light gray */
+    min-height: 200px; /* Ensure it takes some space */
+}
+.placeholder-card p {
+    font-size: 1rem;
     font-weight: 500;
-    z-index: 10;
-    border-radius: inherit; /* Match card corner radius */
-    /* Initially hidden, shown by JS */
-    display: none;
 }
 
+/* --- Tab Content (Keep as is) --- */
+.tab-content { display: none; animation: fadeIn 0.6s ease-out; }
+.tab-content.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
 
-.summary-cards .chart-container {
-    height: 280px; /* Height for charts in summary row */
+/* --- NEW: AI Query Section Styles --- */
+.ai-query-card {
+    margin-bottom: 2.5rem; /* Spacing below the query card */
+    /* No hover transform for this functional card */
 }
-.chart-container.large-chart {
-    height: 400px; /* Increased height for wide/detailed charts */
+.ai-query-card:hover {
+    transform: none;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08); /* Keep standard shadow */
 }
-
-/* --- Tab Content --- */
-.tab-content {
-    display: none;
-    animation: fadeIn 0.6s ease-out; /* Slightly longer fade */
-}
-
-.tab-content.active {
-    display: block;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(15px); }
-    to { opacity: 1; transform: translateY(0); }
+.ai-query-card h3 {
+    padding: 1.8rem 1.8rem 0.6rem 1.8rem; /* Standard title padding */
+    margin-bottom: 1rem; /* Space below title */
 }
 
-/* --- Footer --- */
-.footer {
-    background-color: #343a40; /* Dark Gray */
-    color: #f8f9fa; /* Lighter text */
-    text-align: center;
-    padding: 2rem; /* More padding */
-    margin-top: auto;
+.ai-query-container {
+    display: flex;
+    gap: 0.8rem;
+    padding: 0 1.8rem 1.2rem 1.8rem; /* Padding around input/button */
+    align-items: center;
+}
+
+#ai-query-input {
+    flex-grow: 1; /* Take available space */
+    padding: 0.75rem 1rem;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+#ai-query-input:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+#ai-query-submit {
+    padding: 0.75rem 1.5rem;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+#ai-query-submit:hover {
+    background-color: #0056b3;
+}
+#ai-query-submit:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.ai-query-status {
+    display: flex; /* Use flex to align spinner and text */
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.8rem 1.8rem; /* Match input padding */
     font-size: 0.9rem;
+    color: #495057;
+}
+.ai-query-status .status-spinner {
+    display: inline-block;
+    border: 3px solid #e9ecef;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    animation: spin 1s linear infinite;
+}
+.ai-query-status.error .status-text {
+    color: #dc3545;
+}
+.ai-query-status.error .status-spinner {
+     display: none; /* Hide spinner on error */
 }
 
-/* --- Responsive adjustments --- */
-@media (max-width: 1400px) {
-     .main-content {
-         max-width: 90%;
-     }
-      .chart-container.large-chart {
-         height: 350px; /* Adjust large chart height */
-     }
+
+.ai-query-response {
+    background-color: #f8f9fa; /* Light background for the response */
+    border-top: 2px solid #e9ecef; /* Slightly stronger separator line */
+    padding: 1.5rem 1.8rem; /* Keep padding */
+    margin-top: 1rem; /* Increase space above response */
+    min-height: 60px; /* Ensure it has some height */
+    font-size: 1rem;  /* INCREASED FONT SIZE */
+    line-height: 1.65; /* Slightly increased line height */
+    white-space: pre-wrap; /* Respect newlines from AI */
+    color: #343a40; /* Standard text color */
+    border-radius: 0 0 12px 12px; /* Round bottom corners */
 }
 
+/* Keep the error styling as is */
+.ai-query-response.error {
+    color: #dc3545; /* Red text for errors */
+    font-weight: 500;
+    background-color: #fceded; /* Light red background for error */
+     font-size: 0.95rem; /* Keep error messages slightly smaller */
+     line-height: 1.6;
+}
 
-@media (max-width: 992px) {
-    .kpi-row {
-         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    }
-     .kpi-card p {
-        font-size: 1.7rem;
-    }
-     .summary-cards {
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-     }
-    .chart-row {
-        /* Allow stacking */
-         grid-template-columns: 1fr;
-    }
+/* --- Footer (Keep as is) --- */
+.footer { background-color: #343a40; color: #f8f9fa; text-align: center; padding: 2rem; margin-top: auto; font-size: 0.9rem; }
+
+/* --- Responsive adjustments (Keep previous adjustments, add for AI Query) --- */
+@media (max-width: 1400px) { /* Keep */
+     .main-content { max-width: 90%; }
+      .chart-container.large-chart { height: 350px; }
+}
+@media (max-width: 992px) { /* Keep */
+    .kpi-row { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+     .kpi-card p { font-size: 1.7rem; }
+     .summary-cards { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    .chart-row { grid-template-columns: 1fr; }
      .card h3 { font-size: 1.15rem; }
 }
-
-@media (max-width: 768px) {
+@media (max-width: 768px) { /* Keep & Add */
      .header { padding: 1.5rem; }
      .header h1 { font-size: 1.8rem; }
      .header p { font-size: 1rem; margin-bottom: 1.5rem; }
@@ -434,31 +450,29 @@ body {
      .kpi-card { padding: 1rem 1.2rem; }
      .kpi-card h4 { font-size: 0.8rem; }
      .kpi-card p { font-size: 1.5rem; }
-    .tab-navigation {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.6rem;
-    }
+    .tab-navigation { flex-direction: column; align-items: stretch; gap: 0.6rem; }
     .tab-button { width: 100%; padding: 0.7rem 1.5rem; }
     .summary-container { padding: 1rem 1.2rem; }
     .summary-container h4 { font-size: 1rem; }
     .ai-summary-text { font-size: 0.9rem; }
+    /* AI Query adjustments */
+    .ai-query-container { flex-direction: column; align-items: stretch; gap: 0.6rem; padding: 0 1.5rem 1rem 1.5rem; }
+    #ai-query-submit { width: 100%; }
+    .ai-query-response { padding: 1.2rem 1.5rem; }
 }
-
-@media (max-width: 576px) {
-    .summary-cards {
-          grid-template-columns: 1fr; /* Stack all cards */
-     }
-      .kpi-row {
-         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); /* Smaller min for KPIs */
-         gap: 1rem;
-     }
+@media (max-width: 576px) { /* Keep */
+    .summary-cards { grid-template-columns: 1fr; }
+      .kpi-row { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; }
       .header h1 { font-size: 1.6rem; }
-      .card { padding: 1.5rem; }
-      .chart-container,
-      .summary-cards .chart-container,
-      .chart-container.large-chart {
-        height: 280px; /* More consistent height on mobile */
-      }
+      /* .card { padding: 1.5rem; } */ /* Padding is handled differently now */
+       .card > *:not(.chart-container):not(.summary-container) { padding: 1.5rem; padding-bottom: 0; }
+       .card > *:last-child { padding-bottom: 1.5rem; }
+       .card > h3 { padding: 1.5rem 1.5rem 0.6rem 1.5rem; }
+       .card > .chart-container { padding: 1.5rem; padding-top: 0; }
+      .chart-container, .summary-cards .chart-container, .chart-container.large-chart { height: 280px; }
       .footer { padding: 1.5rem; }
+       .ai-query-card h3 { padding: 1.5rem 1.5rem 0.6rem 1.5rem; }
+       .ai-query-container { padding: 0 1.5rem 1rem 1.5rem; }
+       .ai-query-response { padding: 1.2rem 1.5rem; }
+
 }

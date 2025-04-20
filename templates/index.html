@@ -30,10 +30,29 @@
         </header>
 
         <div class="main-content">
+
+             <!-- NEW: Conversational Query Section -->
+            <div id="ai-query-section" class="card ai-query-card"> <!-- Use card style -->
+                <h3>Ask AI about the Data</h3>
+                <div class="ai-query-container">
+                    <input type="text" id="ai-query-input" placeholder="e.g., What is the overall placement rate? Avg package for CSE? Top 3 skills?">
+                    <button id="ai-query-submit">Ask</button>
+                </div>
+                <div id="ai-query-status" class="ai-query-status" style="display: none;"> <!-- For loading/error -->
+                     <span class="status-spinner"></span> <span class="status-text">Thinking...</span>
+                 </div>
+                <div id="ai-query-response" class="ai-query-response">
+                    <!-- AI response will be displayed here -->
+                </div>
+             </div>
+            <!-- End of Conversational Query Section -->
+
+
             <!-- Academic Performance Tab -->
             <div id="exam-tab" class="tab-content active">
                 <div class="section-title">
                     <h2>Academic Performance</h2>
+                     <p class="section-subtitle">Insights into student marks, grades, and trends.</p> <!-- Optional subtitle -->
                 </div>
                 <!-- AI Summary Placeholder -->
                 <div class="summary-container card">
@@ -51,6 +70,7 @@
                         <h4>Grade Overview</h4>
                         <p id="kpi-grade-overview">--</p> <!-- E.g. Most common -->
                     </div>
+                     <!-- Add more KPIs if relevant -->
                 </div>
                 <div class="summary-cards">
                     <div class="card">
@@ -77,7 +97,12 @@
                         <h3>Top Performing Subjects (Avg Marks)</h3>
                         <div class="chart-container"><canvas id="topSubjectsChart"></canvas></div>
                     </div>
-                    <!-- Add another chart here if needed -->
+                    <!-- START: Replace Placeholder Card -->
+                    <div class="kpi-card" id="kpi-pass-rate-card"> <!-- Use KPI card style -->
+                        <h4>Overall Pass Rate</h4>
+                        <p id="kpi-pass-rate">--</p>
+                        <small class="kpi-note">(Based on Grade Distribution)</small> <!-- Optional small note -->
+                    </div>
                 </div>
             </div>
 
@@ -85,6 +110,7 @@
             <div id="placement-tab" class="tab-content">
                 <div class="section-title">
                     <h2>Placement Statistics</h2>
+                     <p class="section-subtitle">Tracking placement success, packages, and demanded skills.</p>
                 </div>
                  <!-- AI Summary Placeholder -->
                 <div class="summary-container card">
@@ -102,6 +128,7 @@
                         <h4>Overall Average Package (LPA)</h4>
                         <p id="kpi-avg-package">--</p>
                     </div>
+                     <!-- Add more KPIs if relevant -->
                 </div>
                 <div class="summary-cards"> <!-- Now has 5 cards, may wrap based on CSS -->
                     <div class="card">
@@ -147,6 +174,7 @@
             <div id="faculty-tab" class="tab-content">
                 <div class="section-title">
                     <h2>Faculty Evaluations</h2>
+                     <p class="section-subtitle">Aggregated student feedback on teaching quality.</p>
                 </div>
                  <!-- AI Summary Placeholder -->
                 <div class="summary-container card">
@@ -160,6 +188,7 @@
                         <h4>Overall Avg. Faculty Rating</h4>
                         <p id="kpi-avg-rating">--</p>
                     </div>
+                    <!-- Add more KPIs if relevant -->
                  </div>
                 <div class="summary-cards">
                     <div class="card">
@@ -197,7 +226,7 @@
         </div>
 
         <footer class="footer">
-            <p>© 2025 Comprehensive Student Dashboard | Data sourced via Boto3/AWS S3 & Summarized by Gemini</p> <!-- Updated text -->
+            <p>© 2025 Comprehensive Student Dashboard | Data sourced via Boto3/AWS S3 & Summarized/Queried by Gemini</p> <!-- Updated text -->
         </footer>
     </div>
 

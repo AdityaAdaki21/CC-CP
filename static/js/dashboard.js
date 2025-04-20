@@ -1,6 +1,6 @@
 // static/js/dashboard.js
 
-// Chart.js defaults
+// Chart.js defaults (keep as is)
 Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
 Chart.defaults.font.size = 12;
 Chart.defaults.color = '#6c757d'; // Use a slightly muted gray
@@ -16,7 +16,14 @@ const loadingIndicator = document.getElementById('loading-indicator');
 const dashboardElement = document.querySelector('.dashboard');
 const headerElement = document.querySelector('.header');
 
-// --- Data Fetching and Error Handling ---
+// --- NEW: AI Query Elements ---
+const aiQueryInput = document.getElementById('ai-query-input');
+const aiQuerySubmit = document.getElementById('ai-query-submit');
+const aiQueryResponse = document.getElementById('ai-query-response');
+const aiQueryStatus = document.getElementById('ai-query-status');
+const aiQueryStatusText = aiQueryStatus?.querySelector('.status-text');
+
+// --- Data Fetching and Error Handling (keep as is) ---
 async function fetchDashboardData() {
     showLoading();
     try {
@@ -93,26 +100,14 @@ function displayErrorOnChart(canvasId, message = 'Error loading chart data') {
     if (!errorMsgElement) {
         errorMsgElement = document.createElement('div');
         errorMsgElement.className = 'chart-error-message';
-        errorMsgElement.style.position = 'absolute';
-        errorMsgElement.style.inset = '0';
-        errorMsgElement.style.display = 'flex';
-        errorMsgElement.style.justifyContent = 'center';
-        errorMsgElement.style.alignItems = 'center';
-        errorMsgElement.style.padding = '15px';
-        errorMsgElement.style.color = '#dc3545'; // Danger color
-        errorMsgElement.style.backgroundColor = 'rgba(255, 255, 255, 0.9)'; // slight bg
-        errorMsgElement.style.textAlign = 'center';
-        errorMsgElement.style.fontSize = '13px';
-        errorMsgElement.style.fontWeight = '500';
-        errorMsgElement.style.zIndex = '10';
-        errorMsgElement.style.borderRadius = 'inherit'; // Match card corner radius
+        // Style is now mostly in CSS, just control display here
         chartContainer.appendChild(errorMsgElement);
     }
 
     // Hide the canvas, show the error message
     canvas.style.display = 'none';
     errorMsgElement.textContent = message;
-    errorMsgElement.style.display = 'flex';
+    errorMsgElement.style.display = 'flex'; // Use flex as defined in CSS
 }
 
 function clearErrorOnChart(canvasId) {
@@ -126,8 +121,7 @@ function clearErrorOnChart(canvasId) {
 }
 
 
-// --- Initialization Functions ---
-
+// --- Initialization Functions (keep updateKPI, updateComparisonNote as is) ---
 function updateKPI(elementId, value, unit = '', notAvailableText = 'N/A') {
     const element = document.getElementById(elementId);
      if (element) {
@@ -156,7 +150,7 @@ function updateComparisonNote(elementId, value, unit = '', prefix = 'Overall Avg
      }
 }
 
-// --- NEW: Helper function to display AI summary or error ---
+// --- Helper function to display AI summary or error ---
 function updateSummaryDisplay(summaryId, errorId, summaryText, errorText) {
     const summaryElement = document.getElementById(summaryId);
     const errorElement = document.getElementById(errorId);
@@ -176,7 +170,9 @@ function updateSummaryDisplay(summaryId, errorId, summaryText, errorText) {
         errorElement.textContent = `Summary Error: ${errorText}`;
         errorElement.style.display = 'block';
     } else if (summaryText) {
-        summaryElement.textContent = summaryText;
+        // Sanitize potentially unsafe HTML? Basic textContent is safer.
+        // Use innerHTML if markdown/bolding is expected and trusted.
+        summaryElement.innerHTML = summaryText.replace(/\n/g, '<br>'); // Basic newline handling
         summaryElement.style.display = 'block';
     } else {
         // Neither summary nor error text provided (maybe API disabled or unexpected state)
@@ -185,9 +181,9 @@ function updateSummaryDisplay(summaryId, errorId, summaryText, errorText) {
     }
 }
 
-
-// --- Section Initializers ---
-
+// --- Section Initializers (initializeExamCharts, initializePlacementCharts, initializeFacultyCharts - keep as is) ---
+// No changes needed in the chart initialization logic itself for this feature.
+// --- Paste your existing initializeExamCharts, initializePlacementCharts, initializeFacultyCharts functions here ---
 function initializeExamCharts(examData) {
     // --- Display AI Summary FIRST ---
     updateSummaryDisplay(
@@ -202,50 +198,74 @@ function initializeExamCharts(examData) {
         const errorMsg = examData?.error || "Exam data unavailable";
         console.error("Exam data error:", errorMsg);
         // Display errors on all canvases for this section
-        displayErrorOnChart('gradeChart', errorMsg);
-        displayErrorOnChart('departmentPerformanceChart', errorMsg);
-        displayErrorOnChart('topSubjectsChart', errorMsg);
-        displayErrorOnChart('marksComparisonChart', errorMsg);
-        displayErrorOnChart('semesterChart', errorMsg);
+        const chartIds = ['gradeChart', 'departmentPerformanceChart', 'topSubjectsChart', 'marksComparisonChart', 'semesterChart'];
+        chartIds.forEach(id => displayErrorOnChart(id, errorMsg));
         // Update KPIs to show error/NA
         updateKPI('kpi-avg-mark', null, '', 'Error');
         updateKPI('kpi-grade-overview', null, '', 'Error');
+        updateKPI('kpi-pass-rate', null, '', 'Error'); // <-- NEW: Update pass rate KPI on error
         updateComparisonNote('dept-perf-comparison-note', null); // Clear note
         return; // Don't proceed if main data failed
     }
 
     // --- Clear Previous Errors ---
-    clearErrorOnChart('gradeChart');
-    clearErrorOnChart('departmentPerformanceChart');
-    clearErrorOnChart('topSubjectsChart');
-    clearErrorOnChart('marksComparisonChart');
-    clearErrorOnChart('semesterChart');
+    const chartIds = ['gradeChart', 'departmentPerformanceChart', 'topSubjectsChart', 'marksComparisonChart', 'semesterChart'];
+    chartIds.forEach(clearErrorOnChart);
+
 
     // --- Update KPIs ---
     updateKPI('kpi-avg-mark', examData.kpi_overall_avg_mark);
+
+    let overallPassRate = null; // Initialize pass rate
+
     // Check if grade_distribution exists, is an object, and doesn't have an error key
     if (examData.grade_distribution && typeof examData.grade_distribution === 'object' && !examData.grade_distribution.error && Object.keys(examData.grade_distribution).length > 0) {
-        // Find grade with highest count
-         const mostCommonGrade = Object.entries(examData.grade_distribution)
-             .sort(([, countA], [, countB]) => countB - countA)[0]?.[0]; // Get key of first entry after sort
-             updateKPI('kpi-grade-overview', mostCommonGrade || 'N/A', '', 'N/A');
-     } else {
+        const gradeCounts = examData.grade_distribution;
+        const totalStudents = Object.values(gradeCounts).reduce((sum, count) => sum + count, 0);
+        const failCount = gradeCounts['F'] || 0; // Get count for 'F' grade, default to 0
+
+        if (totalStudents > 0) {
+            const passCount = totalStudents - failCount;
+            overallPassRate = (passCount / totalStudents) * 100; // Calculate percentage
+
+            // Update Grade Overview KPI (only if calculation was possible)
+            const validGrades = Object.entries(gradeCounts).filter(([grade, count]) => count > 0);
+            if (validGrades.length > 0) {
+                const mostCommonGrade = validGrades.sort(([, countA], [, countB]) => countB - countA)[0]?.[0];
+                updateKPI('kpi-grade-overview', mostCommonGrade || 'N/A', '', 'N/A');
+            } else {
+                 updateKPI('kpi-grade-overview', null);
+            }
+        } else {
+            // No students with grades found
+             updateKPI('kpi-grade-overview', null); // No overview if no students
+        }
+    } else {
+         // Grade distribution data missing or has error
          updateKPI('kpi-grade-overview', null); // Use default 'N/A'
-     }
+    }
 
+    // --- NEW: Update Pass Rate KPI ---
+    // Use the calculated overallPassRate. updateKPI handles null/undefined.
+    updateKPI('kpi-pass-rate', overallPassRate !== null ? overallPassRate.toFixed(1) : null, '%'); // Format to 1 decimal place
 
-    // --- Create Charts ---
+    // --- Create Charts (Rest of the function remains the same) ---
 
     // Grade Distribution (Pie)
     if (examData.grade_distribution && typeof examData.grade_distribution === 'object' && !examData.grade_distribution.error && Object.values(examData.grade_distribution).some(v => v > 0)) {
         createPieChart('gradeChart', examData.grade_distribution);
     } else {
-        displayErrorOnChart('gradeChart', examData.grade_distribution?.error || 'No Grade Distribution data found');
+        // Display error only if grade data was expected but faulty/missing
+        // Don't display error if the pass rate was calculated but simply 0% or 100%
+        if (!examData.grade_distribution || examData.grade_distribution.error) {
+             displayErrorOnChart('gradeChart', examData.grade_distribution?.error || 'No Grade Distribution data found');
+        } else if (!Object.values(examData.grade_distribution).some(v => v > 0)){
+             displayErrorOnChart('gradeChart', 'No student grades recorded');
+        }
     }
 
     // Department Performance (Bar)
-     const overallAvgMark = examData.kpi_overall_avg_mark;
-    // Check if performance_by_department exists, is an object, and doesn't have an error key
+    const overallAvgMark = examData.kpi_overall_avg_mark;
     if (examData.performance_by_department && typeof examData.performance_by_department === 'object' && !examData.performance_by_department.error && Object.keys(examData.performance_by_department).length > 0) {
         createBarChart('departmentPerformanceChart', examData.performance_by_department, 'Avg Mark', 100); // Scale 0-100
         updateComparisonNote('dept-perf-comparison-note', overallAvgMark);
@@ -255,7 +275,6 @@ function initializeExamCharts(examData) {
     }
 
     // Top Performing Subjects (Horizontal Bar)
-     // Check if subject_performance exists, is an object, and doesn't have an error key
     if (examData.subject_performance && typeof examData.subject_performance === 'object' && !examData.subject_performance.error && Object.keys(examData.subject_performance).length > 0) {
         createHorizontalBarChart('topSubjectsChart', examData.subject_performance, 'Avg Mark', 100); // Scale 0-100
     } else {
@@ -263,35 +282,33 @@ function initializeExamCharts(examData) {
     }
 
     // Internal vs External Marks Comparison (Bar)
-     const comparisonData = {};
-     let hasComparisonData = false;
-     // Check if marks_comparison exists and is an object
-     if (examData.marks_comparison && typeof examData.marks_comparison === 'object') {
-          if (examData.marks_comparison.Internal !== null && typeof examData.marks_comparison.Internal === 'number') {
-              comparisonData.Internal = examData.marks_comparison.Internal;
-              hasComparisonData = true;
-          }
-           if (examData.marks_comparison.External !== null && typeof examData.marks_comparison.External === 'number') {
-              comparisonData.External = examData.marks_comparison.External;
-              hasComparisonData = true;
-          }
-     }
-     if (hasComparisonData) {
-          createMarksComparisonChart('marksComparisonChart', comparisonData);
-     } else {
-          displayErrorOnChart('marksComparisonChart', 'Internal/External mark data unavailable or invalid');
-     }
-
-     // Yearly Performance Trend (Line) - using 'semester_performance' key from backend
-     // Check if semester_performance exists, is an object, and doesn't have an error key
-     if (examData.semester_performance && typeof examData.semester_performance === 'object' && !examData.semester_performance.error && Object.keys(examData.semester_performance).length > 1) { // Need > 1 point for a trend
-         createTrendChart('semesterChart', examData.semester_performance, 'Avg Marks');
-    } else if (examData.semester_performance && typeof examData.semester_performance === 'object' && !examData.semester_performance.error && Object.keys(examData.semester_performance).length === 1){
-        displayErrorOnChart('semesterChart', 'Only one data point found for yearly trend');
-    } else {
-        displayErrorOnChart('semesterChart', examData.semester_performance?.error || 'No Yearly Performance Trend data found');
+    const comparisonData = {};
+    let hasComparisonData = false;
+    if (examData.marks_comparison && typeof examData.marks_comparison === 'object') {
+         if (examData.marks_comparison.Internal !== null && typeof examData.marks_comparison.Internal === 'number') {
+             comparisonData.Internal = examData.marks_comparison.Internal;
+             hasComparisonData = true;
+         }
+          if (examData.marks_comparison.External !== null && typeof examData.marks_comparison.External === 'number') {
+             comparisonData.External = examData.marks_comparison.External;
+             hasComparisonData = true;
+         }
     }
-}
+    if (hasComparisonData) {
+         createMarksComparisonChart('marksComparisonChart', comparisonData);
+    } else {
+         displayErrorOnChart('marksComparisonChart', 'Internal/External mark data unavailable or invalid');
+    }
+
+    // Yearly Performance Trend (Line)
+    if (examData.semester_performance && typeof examData.semester_performance === 'object' && !examData.semester_performance.error && Object.keys(examData.semester_performance).length > 1) { // Need > 1 point for a trend
+        createTrendChart('semesterChart', examData.semester_performance, 'Avg Marks');
+    } else if (examData.semester_performance && typeof examData.semester_performance === 'object' && !examData.semester_performance.error && Object.keys(examData.semester_performance).length === 1){
+       displayErrorOnChart('semesterChart', 'Only one data point found for yearly trend');
+    } else {
+       displayErrorOnChart('semesterChart', examData.semester_performance?.error || 'No Yearly Performance Trend data found');
+    }
+} // End of initializeExamCharts
 
 function initializePlacementCharts(placementData) {
     // --- Display AI Summary FIRST ---
@@ -390,16 +407,18 @@ function initializePlacementCharts(placementData) {
     }
 
 
-    // Top Recruiting Companies (Horizontal Bar)
+    // Top Recruiting Companies (Horizontal Bar) - Display top 10
     if (placementData.top_companies && typeof placementData.top_companies === 'object' && !placementData.top_companies.error && Object.keys(placementData.top_companies).length > 0) {
-        createHorizontalBarChart('companiesChart', placementData.top_companies, 'No. of Placements');
+        const top10Companies = Object.fromEntries(Object.entries(placementData.top_companies).slice(0, 10));
+        createHorizontalBarChart('companiesChart', top10Companies, 'No. of Placements');
     } else {
          displayErrorOnChart('companiesChart', placementData.top_companies?.error || 'Top Companies data unavailable');
     }
 
-    // Most In-Demand Skills (Horizontal Bar)
+    // Most In-Demand Skills (Horizontal Bar) - Display top 10
     if (placementData.top_skills && typeof placementData.top_skills === 'object' && !placementData.top_skills.error && Object.keys(placementData.top_skills).length > 0) {
-        createHorizontalBarChart('skillsChart', placementData.top_skills, 'Frequency');
+        const top10Skills = Object.fromEntries(Object.entries(placementData.top_skills).slice(0, 10));
+        createHorizontalBarChart('skillsChart', top10Skills, 'Frequency');
     } else {
         displayErrorOnChart('skillsChart', placementData.top_skills?.error || 'Top Skills data unavailable');
     }
@@ -487,23 +506,24 @@ function initializeFacultyCharts(facultyData) {
         displayErrorOnChart('ratingTrendsChart', facultyData.yearly_average_trend?.error || 'Yearly Rating Trend data unavailable');
     }
 
-    // Top Rated Faculty (Horizontal Bar)
+    // Top Rated Faculty (Horizontal Bar) - Display Top 5
     if (facultyData.top_faculty && typeof facultyData.top_faculty === 'object' && !facultyData.top_faculty.error && Object.keys(facultyData.top_faculty).length > 0) {
-        createHorizontalBarChart('topFacultyChart', facultyData.top_faculty, 'Avg Rating', 5);
+         const top5Faculty = Object.fromEntries(Object.entries(facultyData.top_faculty).slice(0, 5));
+        createHorizontalBarChart('topFacultyChart', top5Faculty, 'Avg Rating', 5);
     } else {
         displayErrorOnChart('topFacultyChart', facultyData.top_faculty?.error || 'Top Rated Faculty data unavailable');
     }
 
-    // Top Rated Courses (Horizontal Bar)
+    // Top Rated Courses (Horizontal Bar) - Display Top 5
     if (facultyData.course_ratings && typeof facultyData.course_ratings === 'object' && !facultyData.course_ratings.error && Object.keys(facultyData.course_ratings).length > 0) {
-        createHorizontalBarChart('courseRatingChart', facultyData.course_ratings, 'Avg Rating', 5);
+        const top5Courses = Object.fromEntries(Object.entries(facultyData.course_ratings).slice(0, 5));
+        createHorizontalBarChart('courseRatingChart', top5Courses, 'Avg Rating', 5);
     } else {
         displayErrorOnChart('courseRatingChart', facultyData.course_ratings?.error || 'Top Rated Courses data unavailable');
     }
 }
 
-
-// --- Tab Navigation ---
+// --- Tab Navigation (keep as is) ---
 function setupTabNavigation() {
     const tabButtons = document.querySelectorAll('.tab-button');
     const tabContents = document.querySelectorAll('.tab-content');
@@ -540,17 +560,11 @@ function showTab(tabId) {
     if (targetButton) targetButton.classList.add('active');
 
     console.log(`Switched to tab: ${tabId}`);
-    // Optional: Force redraw charts in the new tab if they render oddly
-    // This might be needed if charts are initialized while the tab is hidden
-    // Delay slightly to ensure tab is visible
-    // setTimeout(() => {
-    //     window.dispatchEvent(new Event('resize'));
-    // }, 100);
 }
 
-
-// --- Reusable Chart Creation Functions ---
-
+// --- Reusable Chart Creation Functions (keep as is) ---
+// No changes needed in the chart creation functions themselves.
+// --- Paste your existing createBarChart, createHorizontalBarChart, createPieChart, createScatterPlot, createMarksComparisonChart, createTrendChart, createStackedBarChart functions here ---
 function destroyChartIfExists(elementId) {
     let chartInstance = Chart.getChart(elementId);
     if (chartInstance) chartInstance.destroy();
@@ -848,7 +862,6 @@ function createScatterPlot(elementId, data) {
     }
 }
 
-
 function createMarksComparisonChart(elementId, data) {
      const canvas = document.getElementById(elementId);
     if (!canvas) return;
@@ -975,7 +988,6 @@ function createTrendChart(elementId, data, label) {
     }
 }
 
-
 function createStackedBarChart(elementId, data) {
      const canvas = document.getElementById(elementId);
     if (!canvas) return;
@@ -1038,11 +1050,110 @@ function createStackedBarChart(elementId, data) {
     }
 }
 
+// --- NEW: AI Query Handling ---
+function showAIQueryStatus(message, isError = false) {
+    if (!aiQueryStatus || !aiQueryResponse || !aiQueryStatusText) return;
+    aiQueryResponse.innerHTML = ''; // Clear previous response
+    aiQueryResponse.classList.remove('error');
+    aiQueryStatusText.textContent = message;
+    aiQueryStatus.style.display = 'flex'; // Show status
+    if (isError) {
+        aiQueryStatus.classList.add('error'); // Add error class for styling
+    } else {
+        aiQueryStatus.classList.remove('error');
+    }
+}
+
+function hideAIQueryStatus() {
+     if (aiQueryStatus) aiQueryStatus.style.display = 'none';
+}
+
+function displayAIAnswer(answer) {
+     if (!aiQueryResponse) return;
+     hideAIQueryStatus();
+     // Sanitize? For now, treat as text and replace newlines
+     aiQueryResponse.innerHTML = answer.replace(/\n/g, '<br>');
+     aiQueryResponse.classList.remove('error');
+}
+
+function displayAIError(errorMessage) {
+     if (!aiQueryResponse) return;
+     hideAIQueryStatus();
+     aiQueryResponse.textContent = `Error: ${errorMessage}`;
+     aiQueryResponse.classList.add('error'); // Add error class for styling
+}
+
+async function handleAIQuerySubmit() {
+    if (!aiQueryInput || !aiQuerySubmit) return;
+
+    const question = aiQueryInput.value.trim();
+    if (!question) {
+        displayAIError("Please enter a question.");
+        return;
+    }
+
+    showAIQueryStatus("Thinking..."); // Show loading state
+    aiQuerySubmit.disabled = true; // Disable button during request
+    aiQueryInput.disabled = true;
+
+    try {
+        const response = await fetch('/api/ask', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ question: question }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            // Handle HTTP errors (4xx, 5xx)
+            throw new Error(result.error || `Request failed with status ${response.status}`);
+        }
+
+        if (result.error) {
+            // Handle errors reported in the JSON payload (e.g., parser error, Gemini error)
+            displayAIError(result.error);
+        } else if (result.answer) {
+            // Display successful answer
+            displayAIAnswer(result.answer);
+        } else {
+            // Unexpected: No answer and no error
+             displayAIError("Received an unexpected response from the server.");
+        }
+
+    } catch (error) {
+        console.error("Error submitting AI query:", error);
+        displayAIError(`Network or server error: ${error.message}`);
+    } finally {
+        aiQuerySubmit.disabled = false; // Re-enable button
+        aiQueryInput.disabled = false;
+         // Optionally hide status only on success? Or always hide? Let's always hide.
+         // hideAIQueryStatus(); // Already hidden by displayAIAnswer/displayAIError
+    }
+}
+
 
 // --- Main Execution ---
 document.addEventListener('DOMContentLoaded', async () => {
     showLoading(); // Show loader right away
     setupTabNavigation();
+
+    // --- NEW: Setup AI Query Listener ---
+    if (aiQuerySubmit && aiQueryInput) {
+        aiQuerySubmit.addEventListener('click', handleAIQuerySubmit);
+        // Optional: Allow submitting with Enter key in input field
+        aiQueryInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent default form submission if it were in a form
+                handleAIQuerySubmit();
+            }
+        });
+    } else {
+        console.warn("AI Query elements not found.");
+    }
+    // --- End NEW ---
 
     const dashboardData = await fetchDashboardData(); // Fetch data (handles loader hide/error)
 
@@ -1056,6 +1167,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         displayErrorOnChart('gradeChart', 'Failed to load data');
         displayErrorOnChart('placementRateChart', 'Failed to load data');
         displayErrorOnChart('ratingsChart', 'Failed to load data');
+        displayAIError('Dashboard data could not be loaded. Query feature unavailable.'); // Show error in AI query box too
         return;
     }
 

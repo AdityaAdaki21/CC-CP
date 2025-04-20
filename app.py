@@ -1,5 +1,5 @@
 # app.py
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request # Added request
 import pandas as pd
 import boto3
 import io
@@ -8,6 +8,7 @@ import os
 from collections import Counter
 import traceback
 import numpy as np # Used implicitly by pandas, good to have listed
+import re # Added for basic parsing
 
 # --- Gemini Integration ---
 import google.generativeai as genai
@@ -44,21 +45,41 @@ def generate_gemini_summary(prompt_text, model_name="gemini-1.5-flash"):
         return {"error": "Gemini API key not configured or configuration failed."}
     try:
         print(f"\n--- Sending Prompt to Gemini ({model_name}) ---")
-        # print(f"Prompt: {prompt_text[:500]}...") # Log truncated prompt for debugging
+        # Limit logging length if needed
+        log_prompt = prompt_text if len(prompt_text) < 1000 else prompt_text[:500] + "... (truncated)"
+        print(f"Prompt: {log_prompt}")
+
         model = genai.GenerativeModel(model_name)
+        # Add safety settings if needed (example)
+        # safety_settings=[
+        #     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        #     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        # ]
+        # response = model.generate_content(prompt_text, safety_settings=safety_settings)
         response = model.generate_content(prompt_text)
 
-        # Basic error check (structure may vary slightly between models/versions)
+
+        # Enhanced error checking
         if hasattr(response, 'text') and response.text:
             print("--- Gemini Response Received ---")
-            return {"summary": response.text.strip()}
+            return {"summary": response.text.strip()} # Use 'summary' key consistently
         elif response.prompt_feedback and hasattr(response.prompt_feedback, 'block_reason'):
              block_reason = response.prompt_feedback.block_reason
              print(f"ERROR: Gemini prompt blocked. Reason: {block_reason}")
              return {"error": f"Content generation blocked by API. Reason: {block_reason}"}
+        elif not response.candidates: # Check if candidates list is empty
+             print(f"ERROR: Gemini response generation failed. No candidates found. Full response: {response}")
+             # Check for finish_reason if available
+             finish_reason = response.candidates[0].finish_reason if response.candidates and hasattr(response.candidates[0], 'finish_reason') else 'Unknown'
+             if finish_reason == 'SAFETY':
+                  return {"error": "Content generation blocked due to safety settings."}
+             elif finish_reason == 'RECITATION':
+                  return {"error": "Content generation blocked due to potential recitation."}
+             else:
+                  return {"error": f"Gemini response generation failed (Finish Reason: {finish_reason})."}
         else:
-             # Log the full response for debugging if text is missing
-             print(f"ERROR: Gemini response generation failed or returned empty. Full response: {response}")
+             # Log the full response for debugging if text is missing but candidates exist
+             print(f"ERROR: Gemini response generation failed or returned empty text. Full response: {response}")
              return {"error": "Gemini response generation failed or was empty."}
 
     except Exception as e:
@@ -67,8 +88,10 @@ def generate_gemini_summary(prompt_text, model_name="gemini-1.5-flash"):
         # Provide more specific error messages if possible
         if "API key not valid" in str(e):
              return {"error": "Invalid Gemini API Key."}
-        elif "Quota" in str(e):
-             return {"error": "Gemini API Quota exceeded."}
+        elif "Quota" in str(e) or "429" in str(e):
+             return {"error": "Gemini API Quota exceeded or rate limit hit."}
+        elif "Deadline" in str(e) or "504" in str(e):
+            return {"error": "Gemini API call timed out."}
         return {"error": f"Failed to call Gemini API: {str(e)}"}
 # --------------------------
 
@@ -81,12 +104,20 @@ def index():
 @app.route('/api/data')
 def get_data():
     """API endpoint to fetch data from S3, process it, and generate AI summaries."""
+    print("--- Request received for /api/data ---") # Log start
+
+    # Check cache first (implement caching if needed)
+    # cached_data = cache.get('dashboard_data')
+    # if cached_data:
+    #     print("--- Returning cached data ---")
+    #     return jsonify(cached_data)
+
     # Get data from S3
     exam_df = get_data_from_s3('data/exam_data.csv')
     placement_df = get_data_from_s3('data/placement_data.csv')
     faculty_df = get_data_from_s3('data/faculty_reviews.csv')
 
-    # --- Data Cleaning/Standardization (Keep as is) ---
+    # --- Data Cleaning/Standardization ---
     # Standardize common columns if they exist with different cases/names
     if not exam_df.empty:
         exam_df.columns = exam_df.columns.str.strip().str.lower() # Lowercase columns
@@ -98,7 +129,6 @@ def get_data():
         rename_map_placement = {'dept': 'department', 'pkg_lpa': 'package_lpa'}
         placement_df.rename(columns={k: v for k, v in rename_map_placement.items() if k in placement_df.columns}, inplace=True)
 
-
     if not faculty_df.empty:
         faculty_df.columns = faculty_df.columns.str.strip().str.lower()
         rename_map_faculty = {'fac_name': 'faculty', 'course': 'course_taught', 'dept': 'department'}
@@ -109,8 +139,13 @@ def get_data():
     placement_data = process_placement_data(placement_df)
     faculty_data = process_faculty_data(faculty_df)
 
-    # --- Generate Summaries using Gemini ---
+    all_data = {
+        'exam_data': exam_data,
+        'placement_data': placement_data,
+        'faculty_data': faculty_data
+    }
 
+    # --- Generate Summaries using Gemini ---
     # Exam Summary
     if 'error' not in exam_data:
         prompt_exam = create_exam_summary_prompt(exam_data)
@@ -118,10 +153,9 @@ def get_data():
         if 'summary' in gemini_result:
             exam_data['gemini_summary'] = gemini_result['summary']
         else:
-            exam_data['gemini_summary_error'] = gemini_result['error']
+            exam_data['gemini_summary_error'] = gemini_result.get('error', 'Unknown summary generation error')
     else:
-         exam_data['gemini_summary_error'] = "Summary skipped due to data processing error."
-
+         exam_data['gemini_summary_error'] = f"Summary skipped: {exam_data.get('error', 'Data processing error')}"
 
     # Placement Summary
     if 'error' not in placement_data:
@@ -130,9 +164,9 @@ def get_data():
         if 'summary' in gemini_result:
             placement_data['gemini_summary'] = gemini_result['summary']
         else:
-            placement_data['gemini_summary_error'] = gemini_result['error']
+            placement_data['gemini_summary_error'] = gemini_result.get('error', 'Unknown summary generation error')
     else:
-        placement_data['gemini_summary_error'] = "Summary skipped due to data processing error."
+        placement_data['gemini_summary_error'] = f"Summary skipped: {placement_data.get('error', 'Data processing error')}"
 
     # Faculty Summary
     if 'error' not in faculty_data:
@@ -141,17 +175,17 @@ def get_data():
         if 'summary' in gemini_result:
             faculty_data['gemini_summary'] = gemini_result['summary']
         else:
-            faculty_data['gemini_summary_error'] = gemini_result['error']
+            faculty_data['gemini_summary_error'] = gemini_result.get('error', 'Unknown summary generation error')
     else:
-        faculty_data['gemini_summary_error'] = "Summary skipped due to data processing error."
-
+        faculty_data['gemini_summary_error'] = f"Summary skipped: {faculty_data.get('error', 'Data processing error')}"
     # ------------------------------------
 
-    return jsonify({
-        'exam_data': exam_data,
-        'placement_data': placement_data,
-        'faculty_data': faculty_data
-    })
+    # Cache the result (implement caching if needed)
+    # cache.set('dashboard_data', all_data, timeout=3600) # Cache for 1 hour
+
+    print("--- Finished processing /api/data ---") # Log end
+    return jsonify(all_data)
+
 
 # --- S3 Data Fetching (Keep as is) ---
 def get_data_from_s3(file_path):
@@ -181,6 +215,9 @@ def get_data_from_s3(file_path):
         except UnicodeDecodeError:
             print(f"Warning: UTF-8 decoding failed for {file_path}. Trying 'iso-8859-1' (latin-1).")
             df = pd.read_csv(io.BytesIO(csv_content), encoding='iso-8859-1') # or 'latin-1'
+        except pd.errors.ParserError as pe:
+             print(f"ERROR: Failed to parse CSV file {file_path}. Error: {pe}")
+             return pd.DataFrame()
 
         print(f"Successfully fetched and read {file_path}. Shape: {df.shape}. Columns: {df.columns.tolist()}")
         # Standardize column names immediately after reading
@@ -208,16 +245,11 @@ def get_data_from_s3(file_path):
         return pd.DataFrame()
 
 
-# --- Data Processing Functions (Keep as is, but ensure they return useful dicts) ---
-# process_exam_data(df)
-# process_placement_data(df)
-# process_faculty_data(df)
-# (Assuming these functions are the same as in the original prompt,
-#  returning dictionaries with keys like 'kpi_overall_avg_mark',
-#  'performance_by_department', 'top_companies', etc.)
-# Make sure the processing functions handle missing sub-keys gracefully if needed
-# for the prompt creation functions below. E.g. using .get(key, default_value)
-
+# --- Data Processing Functions (Keep as is) ---
+# These functions (process_exam_data, process_placement_data, process_faculty_data)
+# remain unchanged from your previous version. They return dictionaries
+# containing the pre-calculated aggregate data.
+# --- PASTE your existing process_exam_data, process_placement_data, process_faculty_data functions here ---
 def process_exam_data(df):
     """Processes exam data to generate metrics for the dashboard."""
     if df.empty:
@@ -314,7 +346,6 @@ def process_exam_data(df):
         results['error'] = f'Partial data; Error processing exam data: {str(e)}'
         return results
 
-
 def process_placement_data(df):
     """Processes placement data to generate metrics for the dashboard."""
     if df.empty:
@@ -401,11 +432,13 @@ def process_placement_data(df):
         'placement_rate_by_dept': {},
         'package_by_dept': {},
         'cgpa_package_data': {'cgpa': [], 'package': []},
-        'top_companies': {},
-        'top_skills': {},
+        'top_companies': {}, # Store as dict {company: count}
+        'top_skills': {}, # Store as dict {skill: count}
         'gender_placement': {},
         'cgpa_distribution': cgpa_distribution,
         'avg_cgpa_by_placement': avg_cgpa_by_placement,
+        # Add department list for parser
+        'department_list': sorted(df['department'].astype(str).str.upper().unique().tolist()) if 'department' in df.columns else []
     }
 
     try:
@@ -429,16 +462,17 @@ def process_placement_data(df):
                 'package': valid_scatter_data['package_lpa'].tolist()
              }
 
-        # Top Recruiting Companies (Placed only)
+        # Top Recruiting Companies (Placed only) - Store as dict {company: count}
         if 'company' in df.columns and total_placed > 0:
             placed_df_co = placed_students[placed_students['company'].notna() & (placed_students['company'].str.strip() != '')]
             if not placed_df_co.empty:
-                results['top_companies'] = placed_df_co['company'].str.strip().value_counts().head(10).to_dict()
+                # Store the full count dict, let JS handle top N for display
+                results['top_companies'] = placed_df_co['company'].str.strip().value_counts().to_dict()
         else:
             results['top_companies'] = {'error': "'company' column missing or no placements"}
 
 
-        # Top Skills (Placed only)
+        # Top Skills (Placed only) - Store as dict {skill: count}
         if 'skills' in df.columns and total_placed > 0:
              skills_data = placed_students[placed_students['skills'].notna()]['skills']
              if not skills_data.empty:
@@ -459,7 +493,8 @@ def process_placement_data(df):
                         skill_counts = Counter(all_skills)
                         # Filter out generic/short skills if needed (optional)
                         # skill_counts = {k: v for k, v in skill_counts.items() if len(k) > 2}
-                        results['top_skills'] = {k: v for k, v in sorted(skill_counts.items(), key=lambda item: item[1], reverse=True)[:10]}
+                        # Store the full count dict
+                        results['top_skills'] = dict(sorted(skill_counts.items(), key=lambda item: item[1], reverse=True))
                 except Exception as e:
                     print(f"ERROR processing skills: {e}")
                     results['top_skills'] = {'error': f'Skill processing failed: {str(e)}'}
@@ -504,7 +539,6 @@ def process_placement_data(df):
         traceback.print_exc()
         results['error'] = f'Partial data; Error in placement calculations: {str(e)}'
         return results
-
 
 def process_faculty_data(df):
     """Processes faculty review data to generate metrics for the dashboard."""
@@ -561,9 +595,11 @@ def process_faculty_data(df):
         'dept_teaching_ratings': {},
         'semester_ratings': {},
         'yearly_average_trend': {},
-        'top_faculty': {},
-        'course_ratings': {},
+        'top_faculty': {}, # Store as dict {name: rating}
+        'course_ratings': {}, # Store as dict {course: rating}
         'rating_distribution': rating_distribution,
+        # Add department list for parser
+        'department_list': sorted(df_valid_scale['department'].astype(str).str.upper().unique().tolist()) if 'department' in df_valid_scale.columns else []
     }
 
     try:
@@ -618,19 +654,21 @@ def process_faculty_data(df):
         else: results['yearly_average_trend'] = {'error': "'student_year' column missing"}
 
 
-        # Top Rated Faculty
+        # Top Rated Faculty - Store dict {name: rating}
         if 'faculty' in df_valid_scale.columns:
             valid_fac_df = df_valid_scale[df_valid_scale['faculty'].notna() & (df_valid_scale['faculty'] != '')]
             if not valid_fac_df.empty:
-                 results['top_faculty'] = valid_fac_df.groupby('faculty')['rating'].mean().nlargest(5).round(2).to_dict()
+                 # Store the full dict, let JS handle top N for display
+                 results['top_faculty'] = valid_fac_df.groupby('faculty')['rating'].mean().round(2).sort_values(ascending=False).to_dict()
             else: results['top_faculty'] = {'error': 'No valid faculty data'}
         else: results['top_faculty'] = {'error': "'faculty' column missing"}
 
-        # Top Rated Courses
+        # Top Rated Courses - Store dict {course: rating}
         if 'course_taught' in df_valid_scale.columns:
             valid_course_df = df_valid_scale[df_valid_scale['course_taught'].notna() & (df_valid_scale['course_taught'] != '')]
             if not valid_course_df.empty:
-                results['course_ratings'] = valid_course_df.groupby('course_taught')['rating'].mean().nlargest(5).round(2).to_dict()
+                # Store the full dict
+                results['course_ratings'] = valid_course_df.groupby('course_taught')['rating'].mean().round(2).sort_values(ascending=False).to_dict()
             else: results['course_ratings'] = {'error': 'No valid course_taught data'}
         else: results['course_ratings'] = {'error': "'course_taught' column missing"}
 
@@ -645,41 +683,38 @@ def process_faculty_data(df):
             results['rating_distribution'] = rating_distribution # Ensure it's added even on error
         return results
 
-# --- Prompt Creation Functions ---
-
+# --- Prompt Creation Functions (Keep as is) ---
 def create_exam_summary_prompt(data):
     """Creates a tailored prompt for Gemini based on exam data."""
     # Safely extract data using .get()
     avg_mark = data.get('kpi_overall_avg_mark', 'N/A')
     grades = data.get('grade_distribution', {})
-    most_common_grade = max(grades, key=grades.get) if grades and not grades.get('error') else 'N/A'
+    most_common_grade = max(grades, key=grades.get) if grades and not grades.get('error') and any(grades.values()) else 'N/A' # Check if any grades exist
     dept_perf = data.get('performance_by_department', {})
     top_dept = max(dept_perf, key=dept_perf.get) if dept_perf and not dept_perf.get('error') else 'N/A'
     top_dept_score = dept_perf.get(top_dept, 'N/A') if top_dept != 'N/A' else 'N/A'
     bottom_dept = min(dept_perf, key=dept_perf.get) if dept_perf and not dept_perf.get('error') else 'N/A'
     bottom_dept_score = dept_perf.get(bottom_dept, 'N/A') if bottom_dept != 'N/A' else 'N/A'
-    top_subjects = list(data.get('subject_performance', {}).keys())[:3] # Top 3 subjects
+    # Handle potential error in subject_performance before getting keys
+    top_subjects_data = data.get('subject_performance', {})
+    top_subjects = list(top_subjects_data.keys())[:3] if isinstance(top_subjects_data, dict) and not top_subjects_data.get('error') else []
     internal_avg = data.get('marks_comparison', {}).get('Internal', 'N/A')
     external_avg = data.get('marks_comparison', {}).get('External', 'N/A')
     trend = data.get('semester_performance', {}) # Yearly trend data
 
     prompt = f"""
-    You are an academic data analyst providing a concise summary for a university dashboard.
-    Based ONLY on the following Academic Performance data, generate a 2-4 bullet point summary highlighting key insights.
-    Focus on overall performance, departmental variations, and notable subject/exam type differences.
-    Do NOT invent data or make assumptions beyond what's provided. Format the output as bullet points.
+    Analyze the following Academic Performance data and provide a concise 2-4 bullet point summary for a university dashboard. Focus on overall performance, departmental variations, and notable subject/exam type differences. Base the summary STRICTLY on the provided data points. Do not infer or add information not present.
 
     Key Data Points:
     - Overall Average Mark: {avg_mark}
-    - Most Common Grade: {most_common_grade} (Distribution: {grades})
-    - Top Performing Department (Avg Mark): {top_dept} ({top_dept_score})
-    - Lowest Performing Department (Avg Mark): {bottom_dept} ({bottom_dept_score})
-    - Sample Top Subjects (Avg Mark): {', '.join(top_subjects) if top_subjects else 'N/A'}
+    - Grade Distribution: {grades if grades and not grades.get('error') else 'N/A'} (Most Common: {most_common_grade})
+    - Performance by Department (Avg Mark): {dept_perf if dept_perf and not dept_perf.get('error') else 'N/A'} (Top: {top_dept} [{top_dept_score}], Lowest: {bottom_dept} [{bottom_dept_score}])
+    - Top 3 Subjects by Average Mark: {', '.join(top_subjects) if top_subjects else 'N/A'}
     - Average Internal Mark: {internal_avg}
     - Average External Mark: {external_avg}
-    - Yearly Trend (Avg Marks): {trend if trend and not trend.get('error') else 'N/A'}
+    - Yearly Average Mark Trend: {trend if trend and not trend.get('error') else 'N/A'}
 
-    Generate the summary now:
+    Generate the bullet point summary:
     """
     return prompt
 
@@ -690,34 +725,34 @@ def create_placement_summary_prompt(data):
     avg_pkg = data.get('kpi_overall_avg_package', 'N/A')
     dept_rate = data.get('placement_rate_by_dept', {})
     top_dept_rate = max(dept_rate, key=dept_rate.get) if dept_rate and not dept_rate.get('error') else 'N/A'
-    top_dept_rate_val = f"{dept_rate.get(top_dept_rate, 0)*100:.1f}%" if top_dept_rate != 'N/A' else 'N/A'
+    top_dept_rate_val = f"{dept_rate.get(top_dept_rate, 0)*100:.1f}%" if top_dept_rate != 'N/A' and isinstance(dept_rate.get(top_dept_rate), (int, float)) else 'N/A' # Added check
     dept_pkg = data.get('package_by_dept', {})
     top_dept_pkg = max(dept_pkg, key=dept_pkg.get) if dept_pkg and not dept_pkg.get('error') else 'N/A'
     top_dept_pkg_val = dept_pkg.get(top_dept_pkg, 'N/A') if top_dept_pkg != 'N/A' else 'N/A'
-    top_companies = list(data.get('top_companies', {}).keys())[:3]
-    top_skills = list(data.get('top_skills', {}).keys())[:3]
+    # Handle potential error in top_companies before getting keys
+    top_companies_data = data.get('top_companies', {})
+    top_companies = list(top_companies_data.keys())[:3] if isinstance(top_companies_data, dict) and not top_companies_data.get('error') else []
+    # Handle potential error in top_skills before getting keys
+    top_skills_data = data.get('top_skills', {})
+    top_skills = list(top_skills_data.keys())[:3] if isinstance(top_skills_data, dict) and not top_skills_data.get('error') else []
     avg_cgpa_placed = data.get('avg_cgpa_by_placement', {}).get('Placed', 'N/A')
     avg_cgpa_unplaced = data.get('avg_cgpa_by_placement', {}).get('Not Placed', 'N/A')
     cgpa_dist = data.get('cgpa_distribution', {})
 
     prompt = f"""
-    You are a placement data analyst providing a concise summary for a university dashboard.
-    Based ONLY on the following Placement Statistics, generate a 2-4 bullet point summary highlighting key insights.
-    Focus on overall rates/packages, departmental differences, top recruiters/skills, and CGPA correlations.
-    Do NOT invent data or make assumptions beyond what's provided. Format the output as bullet points.
+    Analyze the following Placement Statistics and provide a concise 2-4 bullet point summary for a university dashboard. Focus on overall rates/packages, departmental differences, top recruiters/skills, and CGPA correlations. Base the summary STRICTLY on the provided data points. Do not infer or add information not present.
 
     Key Data Points:
     - Overall Placement Rate: {rate}
     - Overall Average Package (LPA): {avg_pkg}
-    - Department with Highest Placement Rate: {top_dept_rate} ({top_dept_rate_val})
-    - Department with Highest Average Package (LPA): {top_dept_pkg} ({top_dept_pkg_val})
-    - Sample Top Recruiting Companies: {', '.join(top_companies) if top_companies else 'N/A'}
-    - Sample Top In-Demand Skills: {', '.join(top_skills) if top_skills else 'N/A'}
-    - Average CGPA (Placed): {avg_cgpa_placed}
-    - Average CGPA (Not Placed): {avg_cgpa_unplaced}
+    - Department Placement Rates (Avg): {dept_rate if dept_rate and not dept_rate.get('error') else 'N/A'} (Highest: {top_dept_rate} [{top_dept_rate_val}])
+    - Department Average Packages (LPA): {dept_pkg if dept_pkg and not dept_pkg.get('error') else 'N/A'} (Highest: {top_dept_pkg} [{top_dept_pkg_val}])
+    - Top 3 Recruiting Companies by Count: {', '.join(top_companies) if top_companies else 'N/A'}
+    - Top 3 In-Demand Skills by Frequency: {', '.join(top_skills) if top_skills else 'N/A'}
+    - Average CGPA (Placed vs. Not Placed): Placed: {avg_cgpa_placed}, Not Placed: {avg_cgpa_unplaced}
     - CGPA Distribution (Count): {cgpa_dist if cgpa_dist and not cgpa_dist.get('error') else 'N/A'}
 
-    Generate the summary now:
+    Generate the bullet point summary:
     """
     return prompt
 
@@ -726,35 +761,288 @@ def create_faculty_summary_prompt(data):
      # Safely extract data using .get()
     avg_rating = data.get('kpi_overall_avg_rating', 'N/A')
     rating_dist = data.get('rating_distribution', {})
-    most_common_rating = max(rating_dist, key=rating_dist.get) if rating_dist and not rating_dist.get('error') else 'N/A'
+    # Check if dict, no error, and has non-zero values before finding max
+    most_common_rating = max(rating_dist, key=rating_dist.get) if rating_dist and not rating_dist.get('error') and any(rating_dist.values()) else 'N/A'
     dept_ratings = data.get('dept_teaching_ratings', {})
     top_dept = max(dept_ratings, key=dept_ratings.get) if dept_ratings and not dept_ratings.get('error') else 'N/A'
     top_dept_score = dept_ratings.get(top_dept, 'N/A') if top_dept != 'N/A' else 'N/A'
     bottom_dept = min(dept_ratings, key=dept_ratings.get) if dept_ratings and not dept_ratings.get('error') else 'N/A'
     bottom_dept_score = dept_ratings.get(bottom_dept, 'N/A') if bottom_dept != 'N/A' else 'N/A'
-    top_faculty = list(data.get('top_faculty', {}).keys())[:3]
-    top_courses = list(data.get('course_ratings', {}).keys())[:3]
+    # Handle potential error before getting keys
+    top_faculty_data = data.get('top_faculty', {})
+    top_faculty = list(top_faculty_data.keys())[:3] if isinstance(top_faculty_data, dict) and not top_faculty_data.get('error') else []
+    # Handle potential error before getting keys
+    top_courses_data = data.get('course_ratings', {})
+    top_courses = list(top_courses_data.keys())[:3] if isinstance(top_courses_data, dict) and not top_courses_data.get('error') else []
     trend = data.get('yearly_average_trend', {})
 
     prompt = f"""
-    You are a data analyst summarizing faculty evaluations for a university dashboard.
-    Based ONLY on the following Faculty Evaluation data, generate a 2-4 bullet point summary highlighting key insights.
-    Focus on overall ratings, distribution, departmental variations, and top performers (faculty/courses).
-    Do NOT invent data or make assumptions beyond what's provided. Format the output as bullet points.
+    Analyze the following Faculty Evaluation data and provide a concise 2-4 bullet point summary for a university dashboard. Focus on overall ratings, distribution, departmental variations, and top performers (faculty/courses). Base the summary STRICTLY on the provided data points. Do not infer or add information not present.
 
     Key Data Points:
     - Overall Average Faculty Rating (1-5): {avg_rating}
-    - Most Common Rating Given: {most_common_rating} (Distribution: {rating_dist if rating_dist and not rating_dist.get('error') else 'N/A'})
-    - Top Rated Department (Avg Rating): {top_dept} ({top_dept_score})
-    - Lowest Rated Department (Avg Rating): {bottom_dept} ({bottom_dept_score})
-    - Sample Top Rated Faculty: {', '.join(top_faculty) if top_faculty else 'N/A'}
-    - Sample Top Rated Courses: {', '.join(top_courses) if top_courses else 'N/A'}
-    - Yearly Rating Trend (Avg Rating): {trend if trend and not trend.get('error') else 'N/A'}
+    - Rating Distribution (Count): {rating_dist if rating_dist and not rating_dist.get('error') else 'N/A'} (Most Common: {most_common_rating})
+    - Department Teaching Ratings (Avg): {dept_ratings if dept_ratings and not dept_ratings.get('error') else 'N/A'} (Top: {top_dept} [{top_dept_score}], Lowest: {bottom_dept} [{bottom_dept_score}])
+    - Top 3 Rated Faculty: {', '.join(top_faculty) if top_faculty else 'N/A'}
+    - Top 3 Rated Courses: {', '.join(top_courses) if top_courses else 'N/A'}
+    - Yearly Average Rating Trend: {trend if trend and not trend.get('error') else 'N/A'}
 
-    Generate the summary now:
+    Generate the bullet point summary:
     """
     return prompt
+# -------------------------------------------
 
+# --- NEW: Conversational Query Endpoint ---
+
+# Store fetched data globally (or use caching) for the /api/ask endpoint
+# Warning: Global variables are generally not recommended in Flask for concurrency.
+# Caching (e.g., Flask-Caching) is a better approach for production.
+# For simplicity in this example, we'll fetch it within the /api/ask route.
+dashboard_cache = {}
+
+def extract_department(question, department_lists):
+    """Simple parser to find the first mentioned department code."""
+    question_upper = question.upper()
+    all_known_departments = set()
+    for dept_list in department_lists:
+        if dept_list: # Ensure list is not None or empty
+             all_known_departments.update(dept_list)
+
+    # Prioritize longer matches (e.g., "COMP SCI" before "SCI")
+    sorted_depts = sorted(list(all_known_departments), key=len, reverse=True)
+
+    for dept in sorted_depts:
+        # Use regex to match whole words/codes to avoid partial matches like 'Sci' in 'Science'
+        if re.search(r'\b' + re.escape(dept) + r'\b', question_upper):
+            return dept
+    return None
+
+def parse_and_query_data(question, all_data):
+    """
+    (Simplified) Parses the user question for keywords and retrieves
+    pre-calculated data from the all_data dictionary.
+    Returns a data_summary string or an error message.
+    """
+    q_lower = question.lower()
+    data_summary = "Data Summary: "
+    found_data = False
+
+    # Combine known departments from all data sources
+    known_departments = [
+        all_data['exam_data'].get('department_list', []),
+        all_data['placement_data'].get('department_list', []),
+        all_data['faculty_data'].get('department_list', [])
+    ]
+    dept = extract_department(q_lower, known_departments)
+
+    # --- Placement Data Queries ---
+    placement_data = all_data.get('placement_data', {})
+    if 'placement rate' in q_lower:
+        if dept and 'placement_rate_by_dept' in placement_data and isinstance(placement_data['placement_rate_by_dept'], dict):
+            rate = placement_data['placement_rate_by_dept'].get(dept)
+            if rate is not None:
+                data_summary += f"The placement rate for {dept} is {rate*100:.1f}%. "
+                found_data = True
+            else: return f"Could not find placement rate data for department '{dept}'."
+        elif 'overall' in q_lower or not dept:
+             rate = placement_data.get('kpi_overall_placement_rate')
+             if rate:
+                 data_summary += f"The overall placement rate is {rate}. "
+                 found_data = True
+    elif 'average package' in q_lower or 'avg package' in q_lower or 'average salary' in q_lower:
+         if dept and 'package_by_dept' in placement_data and isinstance(placement_data['package_by_dept'], dict):
+             pkg = placement_data['package_by_dept'].get(dept)
+             if pkg is not None:
+                 data_summary += f"The average package for {dept} is {pkg:.2f} LPA. "
+                 found_data = True
+             else: return f"Could not find average package data for department '{dept}'."
+         elif 'overall' in q_lower or not dept:
+              pkg = placement_data.get('kpi_overall_avg_package')
+              if pkg is not None:
+                  data_summary += f"The overall average package is {pkg:.2f} LPA. "
+                  found_data = True
+    elif 'top companies' in q_lower or 'recruiters' in q_lower:
+        if 'top_companies' in placement_data and isinstance(placement_data['top_companies'], dict) and not placement_data['top_companies'].get('error'):
+             # Get top N (e.g., 5)
+             n = 5
+             try:
+                 num_match = re.search(r'top (\d+)', q_lower)
+                 if num_match: n = int(num_match.group(1))
+             except: pass # ignore if number extraction fails
+             top_n = dict(list(placement_data['top_companies'].items())[:n])
+             company_list = ", ".join(top_n.keys())
+             data_summary += f"The top {len(top_n)} recruiting companies (by count) are: {company_list}. "
+             found_data = True
+        else: data_summary += "Top company data is unavailable. "
+    elif 'top skills' in q_lower or 'demand skills' in q_lower:
+        if 'top_skills' in placement_data and isinstance(placement_data['top_skills'], dict) and not placement_data['top_skills'].get('error'):
+             n = 5
+             try:
+                 num_match = re.search(r'top (\d+)', q_lower)
+                 if num_match: n = int(num_match.group(1))
+             except: pass
+             top_n = dict(list(placement_data['top_skills'].items())[:n])
+             skill_list = ", ".join(top_n.keys())
+             data_summary += f"The top {len(top_n)} in-demand skills (by frequency for placed students) are: {skill_list}. "
+             found_data = True
+        else: data_summary += "Top skills data is unavailable. "
+
+    # --- Exam Data Queries ---
+    exam_data = all_data.get('exam_data', {})
+    if 'average mark' in q_lower or 'avg mark' in q_lower:
+        if dept and 'performance_by_department' in exam_data and isinstance(exam_data['performance_by_department'], dict):
+            mark = exam_data['performance_by_department'].get(dept)
+            if mark is not None:
+                 data_summary += f"The average mark for {dept} is {mark:.2f}. "
+                 found_data = True
+            else: return f"Could not find average mark data for department '{dept}'."
+        elif 'overall' in q_lower or not dept:
+             mark = exam_data.get('kpi_overall_avg_mark')
+             if mark is not None:
+                 data_summary += f"The overall average mark is {mark:.2f}. "
+                 found_data = True
+    elif 'top subject' in q_lower:
+         if 'subject_performance' in exam_data and isinstance(exam_data['subject_performance'], dict) and not exam_data['subject_performance'].get('error'):
+              n = 3
+              try:
+                 num_match = re.search(r'top (\d+)', q_lower)
+                 if num_match: n = int(num_match.group(1))
+              except: pass
+              top_n = dict(list(exam_data['subject_performance'].items())[:n])
+              subj_list = ", ".join(f"{s} ({m:.1f})" for s, m in top_n.items())
+              data_summary += f"The top {len(top_n)} subjects by average mark are: {subj_list}. "
+              found_data = True
+         else: data_summary += "Top subject data is unavailable. "
+
+    # --- Faculty Data Queries ---
+    faculty_data = all_data.get('faculty_data', {})
+    if ('average rating' in q_lower or 'avg rating' in q_lower) and ('faculty' in q_lower or 'teaching' in q_lower):
+         if dept and 'dept_teaching_ratings' in faculty_data and isinstance(faculty_data['dept_teaching_ratings'], dict):
+             rating = faculty_data['dept_teaching_ratings'].get(dept)
+             if rating is not None:
+                  data_summary += f"The average faculty rating for {dept} is {rating:.2f}. "
+                  found_data = True
+             else: return f"Could not find average faculty rating for department '{dept}'."
+         elif 'overall' in q_lower or not dept:
+              rating = faculty_data.get('kpi_overall_avg_rating')
+              if rating is not None:
+                  data_summary += f"The overall average faculty rating is {rating:.2f}. "
+                  found_data = True
+    elif 'top faculty' in q_lower:
+         if 'top_faculty' in faculty_data and isinstance(faculty_data['top_faculty'], dict) and not faculty_data['top_faculty'].get('error'):
+              n = 3
+              try:
+                 num_match = re.search(r'top (\d+)', q_lower)
+                 if num_match: n = int(num_match.group(1))
+              except: pass
+              top_n = dict(list(faculty_data['top_faculty'].items())[:n])
+              fac_list = ", ".join(f"{f} ({r:.1f})" for f, r in top_n.items())
+              data_summary += f"The top {len(top_n)} faculty by average rating are: {fac_list}. "
+              found_data = True
+         else: data_summary += "Top faculty data is unavailable. "
+    elif 'top course' in q_lower:
+         if 'course_ratings' in faculty_data and isinstance(faculty_data['course_ratings'], dict) and not faculty_data['course_ratings'].get('error'):
+              n = 3
+              try:
+                 num_match = re.search(r'top (\d+)', q_lower)
+                 if num_match: n = int(num_match.group(1))
+              except: pass
+              top_n = dict(list(faculty_data['course_ratings'].items())[:n])
+              course_list = ", ".join(f"{c} ({r:.1f})" for c, r in top_n.items())
+              data_summary += f"The top {len(top_n)} courses by average rating are: {course_list}. "
+              found_data = True
+         else: data_summary += "Top course data is unavailable. "
+
+    # --- Fallback ---
+    if not found_data:
+        return "I couldn't find specific data matching your question in the pre-calculated dashboard metrics. Please ask about overall KPIs, department averages (e.g., 'average package for CSE'), or top lists (e.g., 'top 5 skills')."
+
+    return data_summary.strip()
+
+
+def generate_gemini_answer(user_question, data_summary):
+    """ Generates a Gemini answer based on the question and data summary. """
+
+    prompt = f"""
+    You are a helpful assistant for a university dashboard.
+    A user asked the following question: "{user_question}"
+
+    Based *ONLY* on the following data summary extracted from the dashboard, provide a concise and direct answer to the user's question.
+    Do not add any information not present in the summary. Do not apologize if the data is limited. If the summary directly answers the question, state the answer clearly. If the summary provides relevant context but doesn't fully answer, present the relevant context.
+
+    Data Summary:
+    {data_summary}
+
+    Answer the question based *only* on the provided summary:
+    """
+
+    # Use the same gemini_summary function but interpret the result
+    result = generate_gemini_summary(prompt) # Reuses the existing error handling
+
+    if 'error' in result:
+        # Pass back the error from the Gemini call
+        return {"answer": None, "error": f"AI generation failed: {result['error']}"}
+    else:
+        # Success, return the generated answer
+        return {"answer": result.get('summary', "AI model returned an empty response."), "error": None}
+
+
+@app.route('/api/ask', methods=['POST'])
+def ask_ai():
+    """ API endpoint for the conversational query feature. """
+    print("--- Request received for /api/ask ---")
+    if not request.is_json:
+        return jsonify({"answer": None, "error": "Invalid request: Content-Type must be application/json"}), 400
+
+    data = request.get_json()
+    question = data.get('question')
+
+    if not question:
+        return jsonify({"answer": None, "error": "Invalid request: 'question' field is missing"}), 400
+
+    print(f"User question: {question}")
+
+    # --- 1. Get Current Dashboard Data ---
+    # In a real app, use caching or fetch only necessary data. Here we re-fetch.
+    # Note: This is inefficient if get_data is slow. Consider caching all_data.
+    try:
+        # We need the processed data structures, not just the summaries
+        # So, call get_data but maybe skip the summary generation part if possible?
+        # For simplicity, we call the full get_data here.
+        print("Fetching latest data for context...")
+        response = get_data() # This returns a Flask Response object
+        if response.status_code != 200:
+             # Handle error if get_data failed (e.g., S3 issue)
+             error_detail = response.get_json().get('error', 'Failed to fetch dashboard data') if response.is_json else 'Failed to fetch dashboard data'
+             print(f"Error fetching data in /api/ask: {error_detail}")
+             return jsonify({"answer": None, "error": f"Could not retrieve necessary data: {error_detail}"}), 500
+        all_data = response.get_json() # Extract JSON data from the Response
+
+        # Basic check if core data structures exist
+        if not all_data or not all_data.get('placement_data') or not all_data.get('exam_data') or not all_data.get('faculty_data'):
+             print("Error: Core data structures missing after fetching.")
+             return jsonify({"answer": None, "error": "Core data components are missing, cannot answer query."}), 500
+
+    except Exception as e:
+        print(f"Exception during data fetch in /api/ask: {e}")
+        traceback.print_exc()
+        return jsonify({"answer": None, "error": f"An internal error occurred while fetching data: {str(e)}"}), 500
+
+
+    # --- 2. Parse Question & Query Data ---
+    print("Parsing question and querying data...")
+    data_summary_or_error = parse_and_query_data(question, all_data)
+
+    # --- 3. Generate AI Answer (if data found) ---
+    if isinstance(data_summary_or_error, str) and data_summary_or_error.startswith("Data Summary:"):
+        print(f"Generated Data Summary: {data_summary_or_error}")
+        result = generate_gemini_answer(question, data_summary_or_error)
+        print(f"Gemini Result: {result}")
+        return jsonify(result) # Contains 'answer' and 'error' keys
+    else:
+        # parse_and_query_data returned an error message
+        print(f"Parser Error/No Data: {data_summary_or_error}")
+        return jsonify({"answer": None, "error": data_summary_or_error})
 
 # --- Main Execution ---
 if __name__ == '__main__':
